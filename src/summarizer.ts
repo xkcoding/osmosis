@@ -14,7 +14,8 @@ export interface SummarizeOptions {
   promptPath?: string
 }
 
-const DEFAULT_MODEL = 'openai/gpt-5-chat'
+const DEFAULT_MODEL = 'MiniMax-M2.7-highspeed'
+const DEFAULT_BASE_URL = 'https://api.minimaxi.com/v1'
 const DEFAULT_PROMPT_PATH = 'prompts/summary.md'
 
 export async function summarize(
@@ -26,6 +27,12 @@ export async function summarize(
   }
 
   const modelId = options.model ?? process.env.SUMMARY_MODEL ?? DEFAULT_MODEL
+  const baseURL = process.env.LLM_BASE_URL ?? DEFAULT_BASE_URL
+  const apiKey = process.env.MINIMAX_API_KEY ?? process.env.LLM_API_KEY
+  if (!apiKey) {
+    throw new Error('MINIMAX_API_KEY (or LLM_API_KEY) env var is required for summarize')
+  }
+
   const promptPath = options.promptPath ?? DEFAULT_PROMPT_PATH
   const promptTemplate = readFileSync(promptPath, 'utf8')
 
@@ -37,10 +44,7 @@ export async function summarize(
     .replaceAll('{{count}}', String(sources.length))
     .replaceAll('{{sources}}', sourcesBlock)
 
-  const provider = createOpenAI({
-    baseURL: 'https://models.github.ai/inference',
-    apiKey: process.env.GITHUB_TOKEN,
-  })
+  const provider = createOpenAI({ baseURL, apiKey })
 
   const { text } = await generateText({
     model: provider(modelId),

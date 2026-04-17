@@ -54,10 +54,12 @@ Set in **Repo Settings → Secrets and variables → Actions**.
 
 | Name | Type | Used by | Scope |
 |------|------|---------|-------|
-| `TARGET_REPO_PAT` | Secret | `sync`, `notify` | PAT with `repo` scope on second-brain; also used as `GITHUB_TOKEN` for GitHub Models calls |
+| `TARGET_REPO_PAT` | Secret | `sync`, `notify` | PAT with `repo` scope on second-brain; also used by `gh` CLI for listing PRs |
+| `MINIMAX_API_KEY` | Secret | `notify` | MiniMax platform API key used by `summarize` |
 | `WECOM_WEBHOOK_URL` | Secret | `notify` | WeCom bot webhook |
 | `FEISHU_WEBHOOK_URL` | Secret | `notify` | Feishu bot webhook |
-| `SUMMARY_MODEL` | Variable (optional) | `notify` | overrides default `openai/gpt-5-chat` |
+| `SUMMARY_MODEL` | Variable (optional) | `notify` | overrides default `MiniMax-M2.7-highspeed` |
+| `LLM_BASE_URL` | Variable (optional) | `notify` | overrides default `https://api.minimaxi.com/v1` for switching providers |
 
 ## Workflow Injection Hardening
 

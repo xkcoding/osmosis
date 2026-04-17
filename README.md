@@ -18,7 +18,7 @@ cron (每小时)
 - **GitHub Actions** 负责调度、并发、PR 创建
 - **PR 粒度**：每源独立 PR，便于隔离与 review
 - **去重**：依赖目标仓库的 PR label（`auto-sync` + `source:<name>`）+ 标题日期搜索
-- **LLM**：默认 `openai/gpt-5-chat`（GitHub Models），可通过 `SUMMARY_MODEL` 切换
+- **LLM**：默认 `MiniMax-M2.7-highspeed`（MiniMax 平台），可通过 `SUMMARY_MODEL` 切换；`LLM_BASE_URL` 覆盖 API 入口
 
 ## 目录结构
 
@@ -90,7 +90,8 @@ WECOM_WEBHOOK_URL=... FEISHU_WEBHOOK_URL=... \
 
 | Secret | 用途 |
 |--------|------|
-| `TARGET_REPO_PAT` | PAT，权限 `repo`，用于 checkout second-brain + 创建 PR + 调用 GitHub Models |
+| `TARGET_REPO_PAT` | PAT，权限 `repo`，用于 checkout second-brain + 创建 PR + 列 PR（gh CLI） |
+| `MINIMAX_API_KEY` | MiniMax 平台 API key，用于 LLM 摘要 |
 | `WECOM_WEBHOOK_URL` | 企微机器人 webhook |
 | `FEISHU_WEBHOOK_URL` | 飞书机器人 webhook |
 
@@ -98,7 +99,8 @@ WECOM_WEBHOOK_URL=... FEISHU_WEBHOOK_URL=... \
 
 | Variable | 默认 |
 |----------|------|
-| `SUMMARY_MODEL` | `openai/gpt-5-chat` |
+| `SUMMARY_MODEL` | `MiniMax-M2.7-highspeed` |
+| `LLM_BASE_URL` | `https://api.minimaxi.com/v1`（默认 MiniMax，可换 OpenAI-兼容端点） |
 
 ## 添加新订阅源
 
