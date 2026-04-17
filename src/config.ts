@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { parse as parseYaml } from 'yaml'
 import type { SourceConfig } from './fetchers/types.js'
+import type { QualityConfig } from './quality.js'
 
 export interface FrontmatterConfig {
   type?: string
@@ -29,6 +30,7 @@ export interface Subscription {
     obsidian?: ObsidianOutput
     notify?: NotifyOutput
   }
+  quality?: QualityConfig
 }
 
 const SUBSCRIPTIONS_DIR = process.env.OSMOSIS_SUBSCRIPTIONS_DIR ?? 'subscriptions'

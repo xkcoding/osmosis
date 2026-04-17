@@ -50,10 +50,21 @@ osmosis/
 └── package.json
 ```
 
+## 贡献指南
+
+- [contributing/architecture.md](contributing/architecture.md) — 分层、文件职责、依赖约束
+- [contributing/add-fetcher.md](contributing/add-fetcher.md) — 新增订阅源 / 新增 fetcher
+- [contributing/add-notifier.md](contributing/add-notifier.md) — 新增 IM 渠道
+- [contributing/quality-gates.md](contributing/quality-gates.md) — PR 内容质量门禁
+- [contributing/testing.md](contributing/testing.md) — 单测规范
+- [contributing/workflow.md](contributing/workflow.md) — workflow 结构、secrets、调试
+- [CLAUDE.md](CLAUDE.md) — AI agent 入场指南
+
 ## 本地开发
 
 ```bash
 pnpm install
+pnpm check        # typecheck + lint + test（提 PR 前必跑，CI 也跑这三项）
 
 # 列出所有订阅源 slug
 pnpm tsx src/index.ts list

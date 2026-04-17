@@ -6,6 +6,7 @@ import { getFetcher } from './fetchers/registry.js'
 import { formatForObsidian } from './formatter.js'
 import { resolveTemplate, todayParts } from './template.js'
 import { isAlreadySynced } from './dedup.js'
+import { checkContentQuality, formatIssues } from './quality.js'
 import { summarize, type SourceContent } from './summarizer.js'
 import { listSyncedPrs, fetchPrFile } from './pr-listing.js'
 import { getNotifier, listChannels } from './notifiers/registry.js'
@@ -109,6 +110,24 @@ async function runFetch(): Promise<void> {
     writeOutput('source_name', sub.name)
     writeOutput('date', parts.date)
     return
+  }
+
+  const issues = checkContentQuality(result.content, sub.quality)
+  if (issues.length > 0) {
+    const detail = formatIssues(issues)
+    const onFail = sub.quality?.onFail ?? 'error'
+    if (onFail === 'skip') {
+      console.log(`[fetch] ${sub.name} ${parts.date}: quality skip\n${detail}`)
+      writeOutput('has_new_content', 'false')
+      writeOutput('source_name', sub.name)
+      writeOutput('date', parts.date)
+      writeOutput('skipped_reason', `quality:${issues[0]!.rule}`)
+      return
+    }
+    const preview = result.content.slice(0, 500).replaceAll('\n', '\n    ')
+    throw new Error(
+      `Quality check failed for ${sub.name} ${parts.date}:\n${detail}\n\n--- content preview (first 500 chars) ---\n    ${preview}`,
+    )
   }
 
   if (!sub.output.obsidian?.enabled) {
