@@ -86,9 +86,11 @@ export async function fetchPrFile(targetRepo: string, prNumber: number, path: st
   const repo = meta.headRepository.name
   const branch = meta.headRefName
 
+  const encodedPath = path.split('/').map(encodeURIComponent).join('/')
+  const encodedRef = encodeURIComponent(branch)
   const { stdout } = await execFileAsync('gh', [
     'api',
-    `/repos/${owner}/${repo}/contents/${path}?ref=${branch}`,
+    `/repos/${owner}/${repo}/contents/${encodedPath}?ref=${encodedRef}`,
     '--jq', '.content',
   ])
 
