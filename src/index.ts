@@ -217,7 +217,7 @@ async function runSummarize(): Promise<void> {
   }
 
   const body = sections
-    .map((s) => `## ${s.title}\n\n${s.summary}\n\n> 全文 PR: ${s.prUrl}`)
+    .map((s) => `## ${s.title}\n\n${s.summary}\n\n📎 全文 PR: ${s.prUrl}`)
     .join('\n\n---\n\n')
 
   writeFileSync(outputPath, body, 'utf8')
