@@ -165,4 +165,4 @@ jobs:
           WECOM_WEBHOOK_URL: ${{ secrets.WECOM_WEBHOOK_URL }}
           FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
           DATE: ${{ steps.date.outputs.date }}
-        run: pnpm tsx src/index.ts notify --target-repo "$TARGET_REPO" --summary-file summary.md --date "$DATE"
+        run: pnpm tsx src/index.ts notify --target-repo "$TARGET_REPO" --date "$DATE"

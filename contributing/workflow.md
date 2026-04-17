@@ -46,9 +46,9 @@ Runs after sync regardless of per-source results (`if: always() && needs.prepare
    - Lists today's auto-sync PRs in second-brain **that don't yet carry the `summary-sent` label**
    - Loads each PR's subscription yaml + prompt file
    - Fetches each PR's markdown file content, calls the LLM per source
-   - Writes one structured summary.md with a section per source
-2. If `has_summary == 'true'`: `pnpm tsx src/index.ts notify ...` broadcasts to channels listed by today's subscriptions
-3. After at least one channel returns `'sent'`, the CLI tags each included PR with the `summary-sent` label (creating it on the target repo if missing) — next cron tick skips these PRs so the digest is **pushed exactly once per PR**
+   - Writes `summary.md` (human-readable, with a section per source) **and** `summary-sections.json` (structured: one record per source including `sourceName`, `displayTitle`, `summary`, `prUrl`, `prNumber`)
+2. If `has_summary == 'true'`: `pnpm tsx src/index.ts notify ...` reads `summary-sections.json` and sends **one IM card per source** to that subscription's configured channels — never concatenating multiple sources into a single card
+3. After at least one channel returns `'sent'` for a given source, the CLI tags **that source's** PR with the `summary-sent` label (creating it on the target repo if missing) — each source is marked independently based on its own card's delivery
 
 For the full producer-side contract that downstream consumers (e.g. the Obsidian vault's Claude Code hooks) rely on, see [`pr-contract.md`](pr-contract.md).
 

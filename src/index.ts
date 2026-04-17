@@ -8,7 +8,7 @@ import { resolveTemplate, todayParts } from './template.js'
 import { isAlreadySynced } from './dedup.js'
 import { checkContentQuality, formatIssues } from './quality.js'
 import { summarize } from './summarizer.js'
-import { listSyncedPrs, fetchPrFile, markSummarySent } from './pr-listing.js'
+import { fetchPrFile, listSyncedPrs, markSummarySent } from './pr-listing.js'
 import { getNotifier, listChannels } from './notifiers/registry.js'
 import type { NotifyPayload } from './notifiers/types.js'
 
@@ -55,7 +55,9 @@ Commands:
   list        list all subscription slugs (one per line)
   matrix      print GitHub Actions matrix JSON for all subscriptions
   summarize   --target-repo <owner/repo> [--date YYYY-MM-DD] [--output <file>]
-  notify      --target-repo <owner/repo> --summary-file <file> [--date YYYY-MM-DD]
+  notify      --target-repo <owner/repo> [--sections-file <file>] [--date YYYY-MM-DD]
+              reads summary-sections.json (from summarize) and sends one
+              card per source; marks each PR's summary-sent label on success
 `)
 }
 
@@ -223,12 +225,42 @@ async function runSummarize(): Promise<void> {
     .join('\n\n---\n\n')
 
   writeFileSync(outputPath, body, 'utf8')
-  console.log(`[summarize] wrote ${outputPath} (${sections.length} sources)`)
+
+  const sectionsFile = outputPath.replace(/\.md$/i, '') + '-sections.json'
+  const sectionsJson = sections.map((s) => {
+    const prNumber = extractPrNumber(s.prUrl)
+    return {
+      sourceName: s.sourceName,
+      displayTitle: s.displayTitle,
+      summary: s.summary,
+      prUrl: s.prUrl,
+      prNumber,
+      date,
+    }
+  })
+  writeFileSync(sectionsFile, JSON.stringify(sectionsJson, null, 2), 'utf8')
+
+  console.log(`[summarize] wrote ${outputPath} + ${sectionsFile} (${sections.length} sources)`)
   writeOutput('has_summary', 'true')
+  writeOutput('sections_file', sectionsFile)
   writeOutput('pr_count', String(prs.length))
   writeOutput('pr_urls', prs.map((p) => p.url).join(','))
   writeOutput('source_names', sections.map((s) => s.sourceName).join(','))
   writeOutput('source_titles', sections.map((s) => s.displayTitle).join('|'))
+}
+
+function extractPrNumber(url: string): number | null {
+  const m = url.match(/\/pull\/(\d+)(?:\b|$)/)
+  return m ? Number(m[1]) : null
+}
+
+interface SummarySection {
+  sourceName: string
+  displayTitle: string
+  summary: string
+  prUrl: string
+  prNumber: number | null
+  date: string
 }
 
 async function runNotify(): Promise<void> {
@@ -236,58 +268,53 @@ async function runNotify(): Promise<void> {
     args: process.argv.slice(3),
     options: {
       'target-repo': { type: 'string' },
-      'summary-file': { type: 'string' },
+      'sections-file': { type: 'string' },
       date: { type: 'string' },
     },
   })
 
   const targetRepo = values['target-repo'] ?? process.env.TARGET_REPO
   if (!targetRepo) throw new Error('--target-repo or TARGET_REPO is required')
-  const summaryFile = values['summary-file']
-  if (!summaryFile) throw new Error('--summary-file is required')
+  const sectionsFile = values['sections-file'] ?? 'summary-sections.json'
   const date = values.date ?? todayParts().date
 
-  if (!existsSync(summaryFile)) {
-    console.log(`[notify] summary file missing: ${summaryFile}, skip`)
+  if (!existsSync(sectionsFile)) {
+    console.log(`[notify] sections file missing: ${sectionsFile}, skip`)
     return
   }
-  const summary = readFileSync(summaryFile, 'utf8').trim()
-  if (!summary) {
-    console.log(`[notify] empty summary, skip`)
+  const sections = JSON.parse(readFileSync(sectionsFile, 'utf8')) as SummarySection[]
+  if (sections.length === 0) {
+    console.log(`[notify] empty sections, skip`)
     return
   }
 
-  const prs = await listSyncedPrs(targetRepo, date)
-  const seen = new Set<string>()
-  const sources = []
-  for (const pr of prs) {
-    if (seen.has(pr.sourceName)) continue
-    seen.add(pr.sourceName)
-    let title = pr.sourceName
-    try {
-      const sub = loadSubscription(pr.sourceName)
-      const t = (sub.source as { title?: string }).title
-      if (t) title = t
-    } catch {
-      // missing yaml; fall back to slug
-    }
-    sources.push({ name: pr.sourceName, title })
+  for (const section of sections) {
+    await notifyOne(targetRepo, section, date)
   }
+}
+
+async function notifyOne(targetRepo: string, section: SummarySection, date: string): Promise<void> {
+  const tag = `[notify:${section.sourceName}]`
+  if (!section.summary || !section.summary.trim()) {
+    console.log(`${tag} empty summary, skip`)
+    return
+  }
+
   const payload: NotifyPayload = {
-    summary,
-    sources,
-    prUrls: prs.map((p) => p.url),
+    summary: section.summary,
+    sources: [{ name: section.sourceName, title: section.displayTitle }],
+    prUrls: [section.prUrl],
     date,
   }
 
-  const wantedChannels = collectChannels(prs.map((p) => p.sourceName))
+  const wantedChannels = collectChannels([section.sourceName])
   const channels = wantedChannels.length > 0 ? wantedChannels : listChannels()
 
   const results = await Promise.allSettled(
     channels.map(async (ch) => {
       const notifier = getNotifier(ch)
       if (!notifier) {
-        console.log(`[notify] unknown channel: ${ch}, skip`)
+        console.log(`${tag} unknown channel: ${ch}, skip`)
         return 'skipped' as const
       }
       return notifier.send(payload)
@@ -298,21 +325,19 @@ async function runNotify(): Promise<void> {
 
   for (const r of results) {
     if (r.status === 'rejected') {
-      console.error(`[notify] channel failed:`, r.reason)
+      console.error(`${tag} channel failed:`, r.reason)
     }
   }
 
-  if (delivered && prs.length > 0) {
-    for (const pr of prs) {
-      try {
-        await markSummarySent(targetRepo, pr.number)
-        console.log(`[notify] PR #${pr.number} marked ${'summary-sent'}`)
-      } catch (err) {
-        console.error(`[notify] failed to mark PR #${pr.number}:`, err)
-      }
+  if (delivered && section.prNumber != null) {
+    try {
+      await markSummarySent(targetRepo, section.prNumber)
+      console.log(`${tag} PR #${section.prNumber} marked summary-sent`)
+    } catch (err) {
+      console.error(`${tag} failed to mark PR #${section.prNumber}:`, err)
     }
   } else if (!delivered) {
-    console.log('[notify] no channel delivered; PRs not marked, will retry next run')
+    console.log(`${tag} no channel delivered; PR not marked, will retry next run`)
   }
 }
 
