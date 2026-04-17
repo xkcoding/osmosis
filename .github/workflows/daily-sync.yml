@@ -142,7 +142,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.TARGET_REPO_PAT }}
           TARGET_REPO: ${{ env.TARGET_REPO }}
-          SUMMARY_MODEL: ${{ vars.SUMMARY_MODEL || 'anthropic/claude-sonnet-4' }}
+          SUMMARY_MODEL: ${{ vars.SUMMARY_MODEL || 'openai/gpt-5' }}
           DATE: ${{ steps.date.outputs.date }}
         run: pnpm tsx src/index.ts summarize --target-repo "$TARGET_REPO" --date "$DATE" --output summary.md
 

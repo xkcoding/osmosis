@@ -18,7 +18,7 @@ cron (每小时)
 - **GitHub Actions** 负责调度、并发、PR 创建
 - **PR 粒度**：每源独立 PR，便于隔离与 review
 - **去重**：依赖目标仓库的 PR label（`auto-sync` + `source:<name>`）+ 标题日期搜索
-- **LLM**：默认 `anthropic/claude-sonnet-4`（GitHub Models），可通过 `SUMMARY_MODEL` 切换
+- **LLM**：默认 `openai/gpt-5`（GitHub Models），可通过 `SUMMARY_MODEL` 切换
 
 ## 目录结构
 
@@ -98,7 +98,7 @@ WECOM_WEBHOOK_URL=... FEISHU_WEBHOOK_URL=... \
 
 | Variable | 默认 |
 |----------|------|
-| `SUMMARY_MODEL` | `anthropic/claude-sonnet-4` |
+| `SUMMARY_MODEL` | `openai/gpt-5` |
 
 ## 添加新订阅源
 
