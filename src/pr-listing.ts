@@ -74,20 +74,29 @@ export async function fetchPrFile(targetRepo: string, prNumber: number, path: st
   const branchOut = await execFileAsync('gh', [
     'pr', 'view', String(prNumber),
     '--repo', targetRepo,
-    '--json', 'headRefName,headRepositoryOwner,headRepository',
+    '--json', 'headRefName,headRefOid,state,mergeCommit,baseRefName',
   ])
   const meta = JSON.parse(branchOut.stdout) as {
     headRefName: string
-    headRepositoryOwner: { login: string }
-    headRepository: { name: string }
+    headRefOid: string
+    state: string
+    mergeCommit: { oid: string } | null
+    baseRefName: string
   }
 
-  const owner = meta.headRepositoryOwner.login
-  const repo = meta.headRepository.name
-  const branch = meta.headRefName
+  // For merged PRs, the head branch is typically auto-deleted. Use the
+  // merge commit SHA so we read the exact state that landed. For open
+  // PRs, use the head branch (always exists, always up-to-date).
+  const ref =
+    meta.state === 'MERGED' && meta.mergeCommit
+      ? meta.mergeCommit.oid
+      : meta.state === 'CLOSED'
+        ? meta.headRefOid
+        : meta.headRefName
 
+  const [owner, repo] = targetRepo.split('/')
   const encodedPath = path.split('/').map(encodeURIComponent).join('/')
-  const encodedRef = encodeURIComponent(branch)
+  const encodedRef = encodeURIComponent(ref)
   const { stdout } = await execFileAsync('gh', [
     'api',
     `/repos/${owner}/${repo}/contents/${encodedPath}?ref=${encodedRef}`,
