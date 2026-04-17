@@ -53,5 +53,7 @@ gh workflow run daily-sync.yml                            # manually trigger the
 ## Memory-style notes for the next agent
 
 - The `peter-evans/create-pull-request` action is a no-op when the working tree has no changes — that's a deliberate belt-and-suspenders, not a bug to "fix".
-- The `notify` job uses `TARGET_REPO_PAT` as `GITHUB_TOKEN` for GitHub Models, because the action's default `GITHUB_TOKEN` cannot call `models.github.ai`.
-- `gh pr list --search <date>` matches the date string anywhere in the PR (title, body, labels, etc.). The dedup query relies on the date appearing in the auto-generated title.
+- LLM access runs via `MINIMAX_API_KEY` against `https://api.minimaxi.com/v1` (default model `MiniMax-M2.7-highspeed`). Override the provider with `LLM_BASE_URL` + `LLM_API_KEY`.
+- Cron fires hourly. Idempotency is a **two-label** invariant on the downstream PR: `auto-sync` + `source:<slug>` (prevents duplicate PR creation) and `summary-sent` (prevents re-summarize / re-notify). `listSyncedPrs` filters out PRs with `summary-sent`; `notify` adds it after the first successful channel. Never remove the filtering or marking without replacing the idempotency mechanism.
+- `gh pr list` silently overrides repeated `--state` and `--label` flags (second wins). Always use `--state all` + client-side filter, and comma-separated labels inside one `--label` arg.
+- Feishu webhook always returns HTTP 200 even for logical failures (`code=19021/19022/19024/11232`). Always parse the response body and throw on non-zero `code`.

@@ -8,7 +8,7 @@ import { resolveTemplate, todayParts } from './template.js'
 import { isAlreadySynced } from './dedup.js'
 import { checkContentQuality, formatIssues } from './quality.js'
 import { summarize } from './summarizer.js'
-import { listSyncedPrs, fetchPrFile } from './pr-listing.js'
+import { listSyncedPrs, fetchPrFile, markSummarySent } from './pr-listing.js'
 import { getNotifier, listChannels } from './notifiers/registry.js'
 import type { NotifyPayload } from './notifiers/types.js'
 
@@ -270,16 +270,31 @@ async function runNotify(): Promise<void> {
       const notifier = getNotifier(ch)
       if (!notifier) {
         console.log(`[notify] unknown channel: ${ch}, skip`)
-        return
+        return 'skipped' as const
       }
-      await notifier.send(payload)
+      return notifier.send(payload)
     }),
   )
+
+  const delivered = results.some((r) => r.status === 'fulfilled' && r.value === 'sent')
 
   for (const r of results) {
     if (r.status === 'rejected') {
       console.error(`[notify] channel failed:`, r.reason)
     }
+  }
+
+  if (delivered && prs.length > 0) {
+    for (const pr of prs) {
+      try {
+        await markSummarySent(targetRepo, pr.number)
+        console.log(`[notify] PR #${pr.number} marked ${'summary-sent'}`)
+      } catch (err) {
+        console.error(`[notify] failed to mark PR #${pr.number}:`, err)
+      }
+    }
+  } else if (!delivered) {
+    console.log('[notify] no channel delivered; PRs not marked, will retry next run')
   }
 }
 

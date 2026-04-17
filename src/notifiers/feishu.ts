@@ -1,13 +1,13 @@
-import type { Notifier, NotifyPayload } from './types.js'
+import type { Notifier, NotifyPayload, NotifyResult } from './types.js'
 
 export const feishuNotifier: Notifier = {
   channel: 'feishu',
 
-  async send(payload: NotifyPayload): Promise<void> {
+  async send(payload: NotifyPayload): Promise<NotifyResult> {
     const url = process.env.FEISHU_WEBHOOK_URL
     if (!url) {
       console.log('[feishu] FEISHU_WEBHOOK_URL not set, skipping')
-      return
+      return 'skipped'
     }
 
     const body = {
@@ -33,11 +33,12 @@ export const feishuNotifier: Notifier = {
     } catch (err) {
       if (err instanceof SyntaxError) {
         console.log('[feishu] sent')
-        return
+        return 'sent'
       }
       throw err
     }
     console.log('[feishu] sent')
+    return 'sent'
   },
 }
 

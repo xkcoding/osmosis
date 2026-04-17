@@ -3,6 +3,8 @@ import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
 
+export const SUMMARY_SENT_LABEL = 'summary-sent'
+
 export interface SyncedPr {
   number: number
   title: string
@@ -34,6 +36,7 @@ export async function listSyncedPrs(targetRepo: string, date: string): Promise<S
   const raw = JSON.parse(stdout) as RawPr[]
   return raw
     .filter((p) => (p.state === 'OPEN' || p.state === 'MERGED') && p.title.includes(date))
+    .filter((p) => !p.labels.some((l) => l.name === SUMMARY_SENT_LABEL))
     .map((p) => ({
       number: p.number,
       title: p.title,
@@ -42,6 +45,29 @@ export async function listSyncedPrs(targetRepo: string, date: string): Promise<S
       files: p.files.map((f) => f.path),
       sourceName: extractSourceName(p.labels.map((l) => l.name)),
     }))
+}
+
+export async function markSummarySent(targetRepo: string, prNumber: number): Promise<void> {
+  await ensureLabel(targetRepo, SUMMARY_SENT_LABEL)
+  await execFileAsync('gh', [
+    'pr', 'edit', String(prNumber),
+    '--repo', targetRepo,
+    '--add-label', SUMMARY_SENT_LABEL,
+  ])
+}
+
+async function ensureLabel(targetRepo: string, name: string): Promise<void> {
+  try {
+    await execFileAsync('gh', [
+      'label', 'create', name,
+      '--repo', targetRepo,
+      '--color', '0e8a16',
+      '--description', 'Daily summary has been pushed; excluded from future notify runs',
+      '--force',
+    ])
+  } catch (err) {
+    console.error(`[notify] ensureLabel ${name} warning:`, err)
+  }
 }
 
 export async function fetchPrFile(targetRepo: string, prNumber: number, path: string): Promise<string> {

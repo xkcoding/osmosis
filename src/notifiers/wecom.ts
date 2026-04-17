@@ -1,4 +1,4 @@
-import type { Notifier, NotifyPayload } from './types.js'
+import type { Notifier, NotifyPayload, NotifyResult } from './types.js'
 import { buildMessage } from './format.js'
 
 const MAX_BYTES = 4096
@@ -6,11 +6,11 @@ const MAX_BYTES = 4096
 export const wecomNotifier: Notifier = {
   channel: 'wecom',
 
-  async send(payload: NotifyPayload): Promise<void> {
+  async send(payload: NotifyPayload): Promise<NotifyResult> {
     const url = process.env.WECOM_WEBHOOK_URL
     if (!url) {
       console.log('[wecom] WECOM_WEBHOOK_URL not set, skipping')
-      return
+      return 'skipped'
     }
 
     const content = truncate(buildMessage(payload), MAX_BYTES)
@@ -28,6 +28,7 @@ export const wecomNotifier: Notifier = {
       throw new Error(`wecom webhook failed: ${res.status} ${await res.text()}`)
     }
     console.log('[wecom] sent')
+    return 'sent'
   },
 }
 

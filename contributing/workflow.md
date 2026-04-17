@@ -43,10 +43,28 @@ For each subscription:
 Runs after sync regardless of per-source results (`if: always() && needs.prepare.result == 'success'`):
 
 1. `pnpm tsx src/index.ts summarize --target-repo <repo> --date <date> --output summary.md`
-   - Lists today's auto-sync PRs in second-brain
-   - Fetches each PR's markdown file content
-   - Calls GitHub Models with `prompts/summary.md` as the prompt
-2. If `has_summary == 'true'`: `pnpm tsx src/index.ts notify ...` to broadcast to channels listed by today's subscriptions
+   - Lists today's auto-sync PRs in second-brain **that don't yet carry the `summary-sent` label**
+   - Loads each PR's subscription yaml + prompt file
+   - Fetches each PR's markdown file content, calls the LLM per source
+   - Writes one structured summary.md with a section per source
+2. If `has_summary == 'true'`: `pnpm tsx src/index.ts notify ...` broadcasts to channels listed by today's subscriptions
+3. After at least one channel returns `'sent'`, the CLI tags each included PR with the `summary-sent` label (creating it on the target repo if missing) — next cron tick skips these PRs so the digest is **pushed exactly once per PR**
+
+### Idempotency
+
+Cron fires hourly. The pipeline stays idempotent via two independent labels on the downstream PR:
+
+| Label | Set by | Read by | Purpose |
+|---|---|---|---|
+| `source:<slug>` + `auto-sync` + date-in-title | `sync` job (peter-evans) | `dedup.ts::isAlreadySynced` | Don't create a second PR for the same source+date |
+| `summary-sent` | `notify` job after at least one channel delivered | `pr-listing.ts::listSyncedPrs` | Don't re-summarize / re-notify a PR whose digest already went out |
+
+To force a re-send (e.g., after adjusting the prompt):
+
+```bash
+gh pr edit <n> --repo <target> --remove-label summary-sent
+gh workflow run daily-sync.yml
+```
 
 ## Secrets / Variables
 
