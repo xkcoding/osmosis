@@ -1,0 +1,157 @@
+name: Daily Sync
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+env:
+  TARGET_REPO: xkcoding/second-brain
+  NODE_VERSION: '20'
+  PNPM_VERSION: '9'
+
+jobs:
+  prepare:
+    name: Prepare matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.scan.outputs.matrix }}
+      count: ${{ steps.scan.outputs.count }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - id: scan
+        name: Scan subscriptions
+        run: |
+          pnpm tsx src/index.ts matrix
+          COUNT=$(pnpm tsx src/index.ts list | wc -l | tr -d ' ')
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+
+  sync:
+    name: Sync ${{ matrix.name }}
+    needs: prepare
+    if: needs.prepare.outputs.count != '0'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    steps:
+      - name: Checkout osmosis
+        uses: actions/checkout@v4
+        with:
+          path: osmosis
+
+      - name: Checkout second-brain
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.TARGET_REPO }}
+          token: ${{ secrets.TARGET_REPO_PAT }}
+          path: second-brain
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+          cache-dependency-path: osmosis/pnpm-lock.yaml
+
+      - name: Install
+        working-directory: osmosis
+        run: pnpm install --frozen-lockfile
+
+      - name: Fetch subscription
+        id: fetch
+        working-directory: osmosis
+        env:
+          GITHUB_TOKEN: ${{ secrets.TARGET_REPO_PAT }}
+          TARGET_REPO: ${{ env.TARGET_REPO }}
+          SUB_NAME: ${{ matrix.name }}
+        run: pnpm tsx src/index.ts fetch --subscription "$SUB_NAME" --output-dir ../second-brain
+
+      - name: Compute branch + title
+        if: steps.fetch.outputs.has_new_content == 'true'
+        id: meta
+        env:
+          SUB_NAME: ${{ matrix.name }}
+          DATE: ${{ steps.fetch.outputs.date }}
+        run: |
+          echo "branch=auto-sync/${SUB_NAME}-${DATE}" >> "$GITHUB_OUTPUT"
+          echo "title=📡 ${SUB_NAME} ${DATE}" >> "$GITHUB_OUTPUT"
+
+      - name: Create PR
+        if: steps.fetch.outputs.has_new_content == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          path: second-brain
+          token: ${{ secrets.TARGET_REPO_PAT }}
+          branch: ${{ steps.meta.outputs.branch }}
+          title: ${{ steps.meta.outputs.title }}
+          commit-message: "sync: ${{ matrix.name }} ${{ steps.fetch.outputs.date }}"
+          labels: |
+            auto-sync
+            source:${{ matrix.name }}
+            needs-review
+          body: |
+            自动同步自 [${{ matrix.name }}](${{ steps.fetch.outputs.source_url }})
+
+            - 源: `${{ matrix.name }}`
+            - 日期: `${{ steps.fetch.outputs.date }}`
+            - 路径: `${{ steps.fetch.outputs.output_path }}`
+
+  notify:
+    name: Notify
+    needs: [prepare, sync]
+    if: always() && needs.prepare.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Compute date
+        id: date
+        run: |
+          D=$(TZ=Asia/Shanghai date +%Y-%m-%d)
+          echo "date=$D" >> "$GITHUB_OUTPUT"
+
+      - name: Summarize
+        id: summarize
+        env:
+          GITHUB_TOKEN: ${{ secrets.TARGET_REPO_PAT }}
+          TARGET_REPO: ${{ env.TARGET_REPO }}
+          SUMMARY_MODEL: ${{ vars.SUMMARY_MODEL || 'anthropic/claude-sonnet-4' }}
+          DATE: ${{ steps.date.outputs.date }}
+        run: pnpm tsx src/index.ts summarize --target-repo "$TARGET_REPO" --date "$DATE" --output summary.md
+
+      - name: Notify
+        if: steps.summarize.outputs.has_summary == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.TARGET_REPO_PAT }}
+          TARGET_REPO: ${{ env.TARGET_REPO }}
+          WECOM_WEBHOOK_URL: ${{ secrets.WECOM_WEBHOOK_URL }}
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+          DATE: ${{ steps.date.outputs.date }}
+        run: pnpm tsx src/index.ts notify --target-repo "$TARGET_REPO" --summary-file summary.md --date "$DATE"

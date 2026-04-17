@@ -1,0 +1,12 @@
+schema: spec-driven
+
+context: |
+  Project: osmosis — GitHub Actions 驱动的多源内容订阅聚合器
+  Tech stack: TypeScript, GitHub Actions, Vercel AI SDK
+  目标：监听多个内容源（GitHub 仓库/Release/RSS），自动同步到 Obsidian vault（via PR）并通过企微/飞书推送 LLM 摘要
+  约定：
+    - 插件化 fetcher 架构，新增源只加 subscription yaml + fetcher 实现
+    - PR 创建交给 GitHub Action 生态（peter-evans/create-pull-request）
+    - TypeScript 只负责内容获取、格式化、摘要、通知
+    - LLM 使用 GitHub Models（Claude / Gemini）
+    - 公开仓库

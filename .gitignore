@@ -1,0 +1,29 @@
+# dependencies / build output
+node_modules/
+dist/
+*.tsbuildinfo
+
+# test + tool caches
+coverage/
+.vitest-cache/
+.eslintcache
+
+# env / secrets
+.env
+.env*.local
+
+# logs
+*.log
+pnpm-debug.log*
+npm-debug.log*
+yarn-error.log*
+
+# workflow-transient artifacts (root only; prompts/summary.md must be tracked)
+/summary.md
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

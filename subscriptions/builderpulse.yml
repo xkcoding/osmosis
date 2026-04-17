@@ -1,0 +1,27 @@
+name: builderpulse
+
+source:
+  type: github-file
+  repo: BuilderPulse/BuilderPulse
+  path: "zh/{year}/{date}.md"
+  branch: main
+  title: BuilderPulse Daily
+
+output:
+  obsidian:
+    enabled: true
+    path: "00_Inbox/Clippings/{date} - BuilderPulse Daily.md"
+    frontmatter:
+      type: reference
+      source: "https://github.com/BuilderPulse/BuilderPulse"
+      tags:
+        - clipping/builderpulse
+        - AI
+        - indie-hacker
+
+  notify:
+    enabled: true
+    summary: true
+    channels:
+      - wecom
+      - feishu
