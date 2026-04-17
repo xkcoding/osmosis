@@ -1,4 +1,5 @@
 import type { Notifier, NotifyPayload, NotifyResult } from './types.js'
+import { buildHeaderTitle } from './format.js'
 
 export const feishuNotifier: Notifier = {
   channel: 'feishu',
@@ -48,7 +49,7 @@ function buildCard(payload: NotifyPayload): unknown {
     config: { update_multi: true },
     header: {
       template: 'blue',
-      title: { tag: 'plain_text', content: `📡 每日情报摘要 — ${payload.date}` },
+      title: { tag: 'plain_text', content: buildHeaderTitle(payload) },
       padding: '12px 12px 12px 12px',
     },
     body: {

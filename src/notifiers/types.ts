@@ -1,6 +1,11 @@
+export interface SourceInfo {
+  name: string
+  title: string
+}
+
 export interface NotifyPayload {
   summary: string
-  sources: string[]
+  sources: SourceInfo[]
   prUrls: string[]
   date: string
 }

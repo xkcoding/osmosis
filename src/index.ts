@@ -178,7 +178,7 @@ async function runSummarize(): Promise<void> {
     return
   }
 
-  const sections: { sourceName: string; title: string; summary: string; prUrl: string }[] = []
+  const sections: { sourceName: string; displayTitle: string; summary: string; prUrl: string }[] = []
   for (const pr of prs) {
     const mdFile = pr.files.find((f) => f.endsWith('.md'))
     if (!mdFile) continue
@@ -192,16 +192,18 @@ async function runSummarize(): Promise<void> {
     }
     if (subscription.output.notify?.summary === false) continue
 
+    const displayTitle = (subscription.source as { title?: string }).title ?? pr.sourceName
+
     try {
       const content = await fetchPrFile(targetRepo, pr.number, mdFile)
       const promptPath = subscription.summary?.promptFile ?? DEFAULT_PROMPT_PATH
       const promptTemplate = readFileSync(promptPath, 'utf8')
       const text = await summarize(
-        { name: pr.sourceName, title: pr.title, content, prUrl: pr.url },
+        { name: pr.sourceName, title: displayTitle, content, prUrl: pr.url },
         promptTemplate,
       )
       if (text) {
-        sections.push({ sourceName: pr.sourceName, title: pr.title, summary: text, prUrl: pr.url })
+        sections.push({ sourceName: pr.sourceName, displayTitle, summary: text, prUrl: pr.url })
       }
     } catch (err) {
       console.error(`[summarize] failed for PR #${pr.number}:`, err)
@@ -217,7 +219,7 @@ async function runSummarize(): Promise<void> {
   }
 
   const body = sections
-    .map((s) => `## ${s.title}\n\n${s.summary}\n\n📎 全文 PR: ${s.prUrl}`)
+    .map((s) => `## 📡 ${s.displayTitle} — ${date}\n\n${s.summary}\n\n📎 全文 PR: ${s.prUrl}`)
     .join('\n\n---\n\n')
 
   writeFileSync(outputPath, body, 'utf8')
@@ -226,6 +228,7 @@ async function runSummarize(): Promise<void> {
   writeOutput('pr_count', String(prs.length))
   writeOutput('pr_urls', prs.map((p) => p.url).join(','))
   writeOutput('source_names', sections.map((s) => s.sourceName).join(','))
+  writeOutput('source_titles', sections.map((s) => s.displayTitle).join('|'))
 }
 
 async function runNotify(): Promise<void> {
@@ -255,9 +258,24 @@ async function runNotify(): Promise<void> {
   }
 
   const prs = await listSyncedPrs(targetRepo, date)
+  const seen = new Set<string>()
+  const sources = []
+  for (const pr of prs) {
+    if (seen.has(pr.sourceName)) continue
+    seen.add(pr.sourceName)
+    let title = pr.sourceName
+    try {
+      const sub = loadSubscription(pr.sourceName)
+      const t = (sub.source as { title?: string }).title
+      if (t) title = t
+    } catch {
+      // missing yaml; fall back to slug
+    }
+    sources.push({ name: pr.sourceName, title })
+  }
   const payload: NotifyPayload = {
     summary,
-    sources: dedupe(prs.map((p) => p.sourceName)),
+    sources,
     prUrls: prs.map((p) => p.url),
     date,
   }
@@ -311,10 +329,6 @@ function collectChannels(sourceNames: string[]): string[] {
     }
   }
   return Array.from(channels)
-}
-
-function dedupe<T>(items: T[]): T[] {
-  return Array.from(new Set(items))
 }
 
 function writeOutput(key: string, value: string): void {
