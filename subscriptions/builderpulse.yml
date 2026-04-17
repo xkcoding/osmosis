@@ -7,6 +7,9 @@ source:
   branch: main
   title: BuilderPulse Daily
 
+summary:
+  promptFile: prompts/builderpulse.md
+
 output:
   obsidian:
     enabled: true

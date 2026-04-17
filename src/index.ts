@@ -1,13 +1,13 @@
 import { mkdirSync, writeFileSync, readFileSync, existsSync, appendFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { parseArgs } from 'node:util'
-import { listSubscriptions, loadSubscription } from './config.js'
+import { listSubscriptions, loadSubscription, type Subscription } from './config.js'
 import { getFetcher } from './fetchers/registry.js'
 import { formatForObsidian } from './formatter.js'
 import { resolveTemplate, todayParts } from './template.js'
 import { isAlreadySynced } from './dedup.js'
 import { checkContentQuality, formatIssues } from './quality.js'
-import { summarize, type SourceContent } from './summarizer.js'
+import { summarize } from './summarizer.js'
 import { listSyncedPrs, fetchPrFile } from './pr-listing.js'
 import { getNotifier, listChannels } from './notifiers/registry.js'
 import type { NotifyPayload } from './notifiers/types.js'
@@ -152,6 +152,8 @@ async function runFetch(): Promise<void> {
   writeOutput('source_url', result.sourceUrl)
 }
 
+const DEFAULT_PROMPT_PATH = 'prompts/summary.md'
+
 async function runSummarize(): Promise<void> {
   const { values } = parseArgs({
     args: process.argv.slice(3),
@@ -176,30 +178,54 @@ async function runSummarize(): Promise<void> {
     return
   }
 
-  const sources: SourceContent[] = []
+  const sections: { sourceName: string; title: string; summary: string; prUrl: string }[] = []
   for (const pr of prs) {
     const mdFile = pr.files.find((f) => f.endsWith('.md'))
     if (!mdFile) continue
+
+    let subscription: Subscription
+    try {
+      subscription = loadSubscription(pr.sourceName)
+    } catch {
+      console.log(`[summarize] unknown subscription ${pr.sourceName}, skip`)
+      continue
+    }
+    if (subscription.output.notify?.summary === false) continue
+
     try {
       const content = await fetchPrFile(targetRepo, pr.number, mdFile)
-      sources.push({
-        name: pr.sourceName,
-        title: pr.title,
-        content,
-        prUrl: pr.url,
-      })
+      const promptPath = subscription.summary?.promptFile ?? DEFAULT_PROMPT_PATH
+      const promptTemplate = readFileSync(promptPath, 'utf8')
+      const text = await summarize(
+        { name: pr.sourceName, title: pr.title, content, prUrl: pr.url },
+        promptTemplate,
+      )
+      if (text) {
+        sections.push({ sourceName: pr.sourceName, title: pr.title, summary: text, prUrl: pr.url })
+      }
     } catch (err) {
-      console.error(`[summarize] failed to fetch PR #${pr.number} file ${mdFile}:`, err)
+      console.error(`[summarize] failed for PR #${pr.number}:`, err)
     }
   }
 
-  const summary = await summarize(sources)
-  writeFileSync(outputPath, summary, 'utf8')
-  console.log(`[summarize] wrote ${outputPath} (${sources.length} sources)`)
-  writeOutput('has_summary', summary ? 'true' : 'false')
+  if (sections.length === 0) {
+    console.log(`[summarize] no summary produced for ${date}`)
+    writeFileSync(outputPath, '', 'utf8')
+    writeOutput('has_summary', 'false')
+    writeOutput('pr_count', String(prs.length))
+    return
+  }
+
+  const body = sections
+    .map((s) => `## ${s.title}\n\n${s.summary}\n\n> 全文 PR: ${s.prUrl}`)
+    .join('\n\n---\n\n')
+
+  writeFileSync(outputPath, body, 'utf8')
+  console.log(`[summarize] wrote ${outputPath} (${sections.length} sources)`)
+  writeOutput('has_summary', 'true')
   writeOutput('pr_count', String(prs.length))
   writeOutput('pr_urls', prs.map((p) => p.url).join(','))
-  writeOutput('source_names', sources.map((s) => s.name).join(','))
+  writeOutput('source_names', sections.map((s) => s.sourceName).join(','))
 }
 
 async function runNotify(): Promise<void> {

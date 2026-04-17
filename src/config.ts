@@ -23,9 +23,14 @@ export interface NotifyOutput {
   channels: string[]
 }
 
+export interface SummaryConfig {
+  promptFile?: string
+}
+
 export interface Subscription {
   name: string
   source: SourceConfig
+  summary?: SummaryConfig
   output: {
     obsidian?: ObsidianOutput
     notify?: NotifyOutput

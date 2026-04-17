@@ -75,7 +75,47 @@ output:
     channels: [wecom, feishu]
 ```
 
-## Step 4. (Optional) Tune the quality gate
+## Step 4. Write the per-source summary prompt
+
+BuilderPulse's daily news has very different structure from a release feed or an RSS digest. Rather than a generic "extract 3-5 signals" prompt, each source should have its own prompt file tuned to its structure and what reads as signal vs noise.
+
+Create `prompts/<slug>.md`. Use `{{content}}` for the source's today-markdown (already stripped of the file's own frontmatter by the fetcher), `{{title}}` and `{{name}}` are also available.
+
+```md
+# prompts/<slug>.md
+
+你是 <source> 日报的洞察提取器。
+
+## 真正的价值
+
+（写清这个源的结构 + 哪些部分才是读者真正在乎的。对 BuilderPulse 来说，头部 Top 3 新闻是噪声，5 类分析才是信号。）
+
+## 任务
+
+提炼 3-5 条 ...
+
+## 硬约束
+
+- 优先 hard signal（数字、产品名、趋势变化）
+- 不复述所有小节
+- 不堆 emoji
+- 中文输出
+
+## 今日内容
+
+{{content}}
+```
+
+Reference it from the subscription yaml:
+
+```yaml
+summary:
+  promptFile: prompts/<slug>.md
+```
+
+If omitted, the generic `prompts/summary.md` is used — works, but usually gives a shallow read. Prefer a tuned prompt.
+
+## Step 5. (Optional) Tune the quality gate
 
 If your source has shorter content than 200 chars or a different structure, override the gate:
 
@@ -90,7 +130,7 @@ quality:
 
 See [quality-gates.md](quality-gates.md) for what each rule does.
 
-## Step 5. Add tests
+## Step 6. Add tests
 
 Co-locate `src/fetchers/<type>.test.ts`. The fetcher likely hits network (via `gh api`, `fetch`, or another client) — mock the transport rather than calling upstream in unit tests. For `gh`-based fetchers, stub the subprocess runner with vitest `vi.mock`. Verify:
 
@@ -98,7 +138,7 @@ Co-locate `src/fetchers/<type>.test.ts`. The fetcher likely hits network (via `g
 - Returns a `FetchResult` with the right `date`, `title`, `sourceUrl` shape
 - Resolves templates correctly
 
-## Step 6. Verify locally
+## Step 7. Verify locally
 
 ```bash
 pnpm check                                                # typecheck + lint + test
@@ -110,6 +150,6 @@ Confirm:
 - Frontmatter looks right
 - Body length / formatting passes the quality gate
 
-## Step 7. Open the PR
+## Step 8. Open the PR
 
 CI runs `pnpm check`. The next cron tick after merge picks up the new yaml automatically — no workflow edit needed.
