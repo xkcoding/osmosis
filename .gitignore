@@ -9,6 +9,9 @@ coverage/
 .eslintcache
 .cache/
 
+# Claude Code per-session state
+.claude/scheduled_tasks.lock
+
 # env / secrets
 .env
 .env*.local
