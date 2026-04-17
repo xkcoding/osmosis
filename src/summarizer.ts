@@ -51,5 +51,9 @@ export async function summarize(
     prompt: systemPrompt,
   })
 
-  return text.trim()
+  return stripThinking(text).trim()
+}
+
+export function stripThinking(s: string): string {
+  return s.replace(/<think(?:ing)?\b[^>]*>[\s\S]*?<\/think(?:ing)?>\s*/gi, '')
 }
