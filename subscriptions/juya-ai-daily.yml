@@ -1,0 +1,29 @@
+name: juya-ai-daily
+
+source:
+  type: rss
+  feedUrl: https://imjuya.github.io/juya-ai-daily/rss.xml
+  titlePattern: "{date}"
+  title: 橘鸦 AI 早报
+
+summary:
+  promptFile: prompts/juya-ai-daily.md
+
+output:
+  obsidian:
+    enabled: true
+    path: "00_Inbox/Clippings/{date} - 橘鸦 AI 早报.md"
+    frontmatter:
+      type: reference
+      source: "https://imjuya.github.io/juya-ai-daily/"
+      tags:
+        - clipping/juya-ai-daily
+        - AI
+        - news
+
+  notify:
+    enabled: true
+    summary: true
+    channels:
+      - wecom
+      - feishu

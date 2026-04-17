@@ -1,5 +1,6 @@
 import type { Fetcher } from './types.js'
 import { githubFileFetcher } from './github-file.js'
+import { rssFetcher } from './rss.js'
 
 const registry = new Map<string, Fetcher>()
 
@@ -16,3 +17,4 @@ export function getFetcher(type: string): Fetcher {
 }
 
 register(githubFileFetcher)
+register(rssFetcher)
