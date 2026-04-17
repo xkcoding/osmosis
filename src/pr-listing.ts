@@ -17,9 +17,8 @@ export async function listSyncedPrs(targetRepo: string, date: string): Promise<S
     'pr', 'list',
     '--repo', targetRepo,
     '--label', 'auto-sync',
-    '--state', 'open',
-    '--state', 'merged',
-    '--json', 'number,title,url,labels,files',
+    '--state', 'all',
+    '--json', 'number,title,url,labels,files,state',
     '--limit', '100',
   ])
 
@@ -27,13 +26,14 @@ export async function listSyncedPrs(targetRepo: string, date: string): Promise<S
     number: number
     title: string
     url: string
+    state: string
     labels: { name: string }[]
     files: { path: string }[]
   }
 
   const raw = JSON.parse(stdout) as RawPr[]
   return raw
-    .filter((p) => p.title.includes(date))
+    .filter((p) => (p.state === 'OPEN' || p.state === 'MERGED') && p.title.includes(date))
     .map((p) => ({
       number: p.number,
       title: p.title,

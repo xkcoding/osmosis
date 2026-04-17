@@ -13,13 +13,13 @@ export async function isAlreadySynced(query: DedupQuery): Promise<boolean> {
   const { stdout } = await execFileAsync('gh', [
     'pr', 'list',
     '--repo', query.targetRepo,
-    '--label', 'auto-sync',
-    '--label', `source:${query.sourceName}`,
-    '--state', 'open',
-    '--state', 'merged',
-    '--json', 'title',
+    '--label', `auto-sync,source:${query.sourceName}`,
+    '--state', 'all',
+    '--json', 'title,state',
     '--limit', '50',
   ])
-  const list = JSON.parse(stdout) as { title: string }[]
-  return list.some((p) => p.title.includes(query.date))
+  const list = JSON.parse(stdout) as { title: string; state: string }[]
+  return list.some(
+    (p) => (p.state === 'OPEN' || p.state === 'MERGED') && p.title.includes(query.date),
+  )
 }
