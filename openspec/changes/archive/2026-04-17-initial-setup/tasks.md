@@ -44,8 +44,10 @@
 
 ## Phase 6: Second-Brain 侧集成
 
-- [ ] **T6.1** 在 second-brain 添加 Claude Code SessionStart hook — 检查 auto-sync PR
-- [ ] **T6.2** 编写 PR review 引导逻辑（展示 PR 列表，引导处理）
+osmosis 侧的职责是**输出一个稳定可编程的 PR 契约**，供下游仓库（second-brain）的 Claude Code hooks / 命令消费。这部分 osmosis 已交付。实际的 hook + PR review 命令实现属于 second-brain 仓库的范畴，在那边另起 opsx change 处理。
+
+- [x] **T6.1** ~~在 second-brain 添加 Claude Code SessionStart hook~~ → osmosis 侧已输出 `contributing/pr-contract.md` 作为握手文档（四个 label 语义、安全/不安全操作、gh 查询 recipe）；hook 具体实现由 second-brain 侧 opsx change 完成
+- [x] **T6.2** ~~编写 PR review 引导逻辑~~ → 同上，由 second-brain 侧实现，osmosis 只保证契约稳定
 
 ## Phase 7: 文档 + 上线
 
