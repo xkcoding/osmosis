@@ -12,6 +12,7 @@
     "fetch": "tsx src/index.ts fetch",
     "summarize": "tsx src/index.ts summarize",
     "notify": "tsx src/index.ts notify",
+    "try-summary": "tsx scripts/try-summary.ts",
     "build": "tsup src/index.ts --format esm --target node20 --clean",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",

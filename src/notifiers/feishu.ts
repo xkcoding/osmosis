@@ -25,7 +25,6 @@ export const feishuNotifier: Notifier = {
     if (!res.ok) {
       throw new Error(`feishu webhook HTTP ${res.status}: ${text}`)
     }
-    // Feishu always returns 200; check response.code for logical failures
     try {
       const data = JSON.parse(text) as { code?: number; msg?: string }
       if (typeof data.code === 'number' && data.code !== 0) {
@@ -43,11 +42,6 @@ export const feishuNotifier: Notifier = {
 }
 
 function buildCard(payload: NotifyPayload): unknown {
-  const prList = payload.prUrls.length > 0
-    ? payload.prUrls.map((url) => `- ${url}`).join('\n')
-    : '- (无新 PR)'
-  const sourceNames = payload.sources.join(', ') || '(none)'
-
   return {
     schema: '2.0',
     config: { update_multi: true },
@@ -63,19 +57,6 @@ function buildCard(payload: NotifyPayload): unknown {
         {
           tag: 'markdown',
           content: payload.summary,
-          text_align: 'left',
-          margin: '0px 0px 0px 0px',
-        },
-        { tag: 'hr' },
-        {
-          tag: 'markdown',
-          content: `**📎 全文 PR**\n${prList}`,
-          text_align: 'left',
-          margin: '0px 0px 0px 0px',
-        },
-        {
-          tag: 'markdown',
-          content: `_osmosis · 来源: ${sourceNames}_`,
           text_align: 'left',
           margin: '0px 0px 0px 0px',
         },
