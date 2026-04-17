@@ -17,11 +17,10 @@ export async function listSyncedPrs(targetRepo: string, date: string): Promise<S
     'pr', 'list',
     '--repo', targetRepo,
     '--label', 'auto-sync',
-    '--search', `${date} created:${date}`,
     '--state', 'open',
     '--state', 'merged',
     '--json', 'number,title,url,labels,files',
-    '--limit', '50',
+    '--limit', '100',
   ])
 
   type RawPr = {
@@ -33,14 +32,16 @@ export async function listSyncedPrs(targetRepo: string, date: string): Promise<S
   }
 
   const raw = JSON.parse(stdout) as RawPr[]
-  return raw.map((p) => ({
-    number: p.number,
-    title: p.title,
-    url: p.url,
-    labels: p.labels.map((l) => l.name),
-    files: p.files.map((f) => f.path),
-    sourceName: extractSourceName(p.labels.map((l) => l.name)),
-  }))
+  return raw
+    .filter((p) => p.title.includes(date))
+    .map((p) => ({
+      number: p.number,
+      title: p.title,
+      url: p.url,
+      labels: p.labels.map((l) => l.name),
+      files: p.files.map((f) => f.path),
+      sourceName: extractSourceName(p.labels.map((l) => l.name)),
+    }))
 }
 
 export async function fetchPrFile(targetRepo: string, prNumber: number, path: string): Promise<string> {

@@ -15,11 +15,11 @@ export async function isAlreadySynced(query: DedupQuery): Promise<boolean> {
     '--repo', query.targetRepo,
     '--label', 'auto-sync',
     '--label', `source:${query.sourceName}`,
-    '--search', query.date,
     '--state', 'open',
     '--state', 'merged',
-    '--json', 'number',
+    '--json', 'title',
+    '--limit', '50',
   ])
-  const list = JSON.parse(stdout) as { number: number }[]
-  return list.length > 0
+  const list = JSON.parse(stdout) as { title: string }[]
+  return list.some((p) => p.title.includes(query.date))
 }
