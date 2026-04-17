@@ -14,7 +14,7 @@ export interface SummarizeOptions {
   promptPath?: string
 }
 
-const DEFAULT_MODEL = 'openai/gpt-5'
+const DEFAULT_MODEL = 'openai/gpt-5-chat'
 const DEFAULT_PROMPT_PATH = 'prompts/summary.md'
 
 export async function summarize(

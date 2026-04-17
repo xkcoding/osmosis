@@ -57,7 +57,7 @@ Set in **Repo Settings → Secrets and variables → Actions**.
 | `TARGET_REPO_PAT` | Secret | `sync`, `notify` | PAT with `repo` scope on second-brain; also used as `GITHUB_TOKEN` for GitHub Models calls |
 | `WECOM_WEBHOOK_URL` | Secret | `notify` | WeCom bot webhook |
 | `FEISHU_WEBHOOK_URL` | Secret | `notify` | Feishu bot webhook |
-| `SUMMARY_MODEL` | Variable (optional) | `notify` | overrides default `openai/gpt-5` |
+| `SUMMARY_MODEL` | Variable (optional) | `notify` | overrides default `openai/gpt-5-chat` |
 
 ## Workflow Injection Hardening
 
