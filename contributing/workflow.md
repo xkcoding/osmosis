@@ -50,6 +50,8 @@ Runs after sync regardless of per-source results (`if: always() && needs.prepare
 2. If `has_summary == 'true'`: `pnpm tsx src/index.ts notify ...` broadcasts to channels listed by today's subscriptions
 3. After at least one channel returns `'sent'`, the CLI tags each included PR with the `summary-sent` label (creating it on the target repo if missing) — next cron tick skips these PRs so the digest is **pushed exactly once per PR**
 
+For the full producer-side contract that downstream consumers (e.g. the Obsidian vault's Claude Code hooks) rely on, see [`pr-contract.md`](pr-contract.md).
+
 ### Idempotency
 
 Cron fires hourly. The pipeline stays idempotent via two independent labels on the downstream PR:

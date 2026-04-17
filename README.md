@@ -58,6 +58,7 @@ osmosis/
 - [contributing/quality-gates.md](contributing/quality-gates.md) — PR 内容质量门禁
 - [contributing/testing.md](contributing/testing.md) — 单测规范
 - [contributing/workflow.md](contributing/workflow.md) — workflow 结构、secrets、调试
+- [contributing/pr-contract.md](contributing/pr-contract.md) — 下游仓库（Obsidian vault）看到的 PR 握手契约
 - [CLAUDE.md](CLAUDE.md) — AI agent 入场指南
 
 ## 本地开发
