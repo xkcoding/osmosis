@@ -27,6 +27,7 @@ export const wecomNotifier: Notifier = {
     if (!res.ok) {
       throw new Error(`wecom webhook failed: ${res.status} ${await res.text()}`)
     }
+    console.log('[wecom] sent')
   },
 }
 

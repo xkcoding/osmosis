@@ -23,8 +23,8 @@
 
 - [x] **T3.1** 实现 `prepare` job — 扫描 subscriptions/ 生成 matrix
 - [x] **T3.2** 实现 `sync` job — matrix 并行，调用 fetch + peter-evans/create-pull-request
-- [ ] **T3.3** 配置 Secrets（TARGET_REPO_PAT）
-- [ ] **T3.4** 端到端测试 — workflow_dispatch 手动触发，验证 PR 创建
+- [x] **T3.3** 配置 Secrets（TARGET_REPO_PAT）
+- [x] **T3.4** 端到端测试 — workflow_dispatch 手动触发，验证 PR 创建
 
 ## Phase 4: LLM 摘要
 
@@ -40,7 +40,7 @@
 - [x] **T5.3** 实现飞书 notifier（`src/notifiers/feishu.ts`）
 - [x] **T5.4** 实现 `src/index.ts` notify 子命令
 - [x] **T5.5** 在 workflow 中接入 `notify` job
-- [ ] **T5.6** 配置 Secrets（WECOM_WEBHOOK_URL, FEISHU_WEBHOOK_URL）
+- [x] **T5.6** 配置 Secrets（FEISHU_WEBHOOK_URL 配了；WECOM_WEBHOOK_URL 暂未配，notifier 按设计静默跳过）
 
 ## Phase 6: Second-Brain 侧集成
 
@@ -50,5 +50,5 @@
 ## Phase 7: 文档 + 上线
 
 - [x] **T7.1** 完善 README（安装配置、添加新订阅源指南、架构说明）
-- [ ] **T7.2** 启用 cron schedule，正式上线
-- [ ] **T7.3** 验证完整流程：cron → fetch → PR → summary → notify
+- [x] **T7.2** 启用 cron schedule，正式上线
+- [x] **T7.3** 验证完整流程：cron → fetch → PR → summary → notify

@@ -32,9 +32,13 @@ export const feishuNotifier: Notifier = {
         throw new Error(`feishu webhook logical failure: code=${data.code} msg=${data.msg ?? ''}`)
       }
     } catch (err) {
-      if (err instanceof SyntaxError) return
+      if (err instanceof SyntaxError) {
+        console.log('[feishu] sent')
+        return
+      }
       throw err
     }
+    console.log('[feishu] sent')
   },
 }
 

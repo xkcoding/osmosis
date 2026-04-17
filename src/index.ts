@@ -247,7 +247,6 @@ async function runNotify(): Promise<void> {
         return
       }
       await notifier.send(payload)
-      console.log(`[notify] ${ch} sent`)
     }),
   )
 
