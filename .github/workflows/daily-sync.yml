@@ -142,6 +142,21 @@ jobs:
           DATE: ${{ steps.date.outputs.date }}
         run: pnpm tsx src/index.ts summarize --target-repo "$TARGET_REPO" --date "$DATE" --output summary.md
 
+      - name: Dump summary for inspection
+        if: steps.summarize.outputs.has_summary == 'true'
+        run: |
+          echo "::group::summary.md"
+          cat summary.md
+          echo "::endgroup::"
+
+      - name: Upload summary artifact
+        if: steps.summarize.outputs.has_summary == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: summary-${{ steps.date.outputs.date }}
+          path: summary.md
+          retention-days: 14
+
       - name: Notify
         if: steps.summarize.outputs.has_summary == 'true'
         env:
