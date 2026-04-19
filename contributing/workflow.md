@@ -88,6 +88,19 @@ Per [GitHub's guidance](https://github.blog/security/vulnerability-research/how-
 - **Never** interpolate `${{ ... }}` directly inside `run:` commands when the value comes from anything that could be attacker-controlled. Move it to an `env:` block and reference via `"$VAR"`.
 - For values that are repo-internal and trusted (e.g. `${{ matrix.name }}` derived from our own yaml files, `${{ steps.fetch.outputs.date }}` derived from our own CLI), still prefer the env-var pattern as a habit. The current `daily-sync.yml` follows this convention — keep it that way when adding steps.
 
+## Failure / recovery alerts
+
+A fourth job, `alert`, runs after `prepare`/`sync`/`notify` regardless of outcome and edge-triggers a feishu text message:
+
+- **success → failure**: `❌ osmosis daily-sync 失败 (run <id>) ... <run url>`
+- **failure → success**: `✅ osmosis daily-sync 已恢复 (run <id>) <run url>`
+- **failure → failure** (8th hour of the same outage): silent — already alerted on the first transition
+- **success → success**: silent
+
+Decision is made by querying `gh run list --status completed --limit 1` for the prior run's conclusion. The `alert` job uses the default `GITHUB_TOKEN` (which has `actions:read` on this repo) and the same `FEISHU_WEBHOOK_URL` secret as the daily digest.
+
+If `FEISHU_WEBHOOK_URL` is unset, the alert step exits 0 silently (mirrors the rest of the notifier behavior).
+
 ## Triggering Manually
 
 ```bash

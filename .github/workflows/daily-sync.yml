@@ -167,3 +167,55 @@ jobs:
           FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
           DATE: ${{ steps.date.outputs.date }}
         run: pnpm tsx src/index.ts notify --target-repo "$TARGET_REPO" --date "$DATE"
+
+  alert:
+    name: Edge-triggered failure / recovery alert
+    needs: [prepare, sync, notify]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compute current state + lookup prior run
+        id: state
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PREPARE_RESULT: ${{ needs.prepare.result }}
+          SYNC_RESULT: ${{ needs.sync.result }}
+          NOTIFY_RESULT: ${{ needs.notify.result }}
+        run: |
+          if [ "$PREPARE_RESULT" = "failure" ] || [ "$SYNC_RESULT" = "failure" ] || [ "$NOTIFY_RESULT" = "failure" ]; then
+            CURRENT="failure"
+          else
+            CURRENT="success"
+          fi
+          # Skip the in-progress current run; take the most recently completed one
+          PRIOR=$(gh run list --workflow daily-sync.yml --status completed --limit 1 --json conclusion --jq '.[0].conclusion // "unknown"')
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "prior=$PRIOR" >> "$GITHUB_OUTPUT"
+          echo "state: prior=$PRIOR current=$CURRENT"
+
+      - name: Alert on transition into failure
+        if: steps.state.outputs.current == 'failure' && steps.state.outputs.prior != 'failure'
+        env:
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          PREPARE_RESULT: ${{ needs.prepare.result }}
+          SYNC_RESULT: ${{ needs.sync.result }}
+          NOTIFY_RESULT: ${{ needs.notify.result }}
+        run: |
+          [ -z "$FEISHU_WEBHOOK_URL" ] && { echo "no webhook"; exit 0; }
+          BODY=$(jq -nc \
+            --arg text "❌ osmosis daily-sync 失败 (run ${GITHUB_RUN_ID})\nprepare: ${PREPARE_RESULT} | sync: ${SYNC_RESULT} | notify: ${NOTIFY_RESULT}\n${RUN_URL}" \
+            '{msg_type:"text", content:{text:$text}}')
+          curl -fsS -X POST -H "Content-Type: application/json" -d "$BODY" "$FEISHU_WEBHOOK_URL"
+
+      - name: Alert on recovery
+        if: steps.state.outputs.current == 'success' && steps.state.outputs.prior == 'failure'
+        env:
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          [ -z "$FEISHU_WEBHOOK_URL" ] && { echo "no webhook"; exit 0; }
+          BODY=$(jq -nc \
+            --arg text "✅ osmosis daily-sync 已恢复 (run ${GITHUB_RUN_ID})\n${RUN_URL}" \
+            '{msg_type:"text", content:{text:$text}}')
+          curl -fsS -X POST -H "Content-Type: application/json" -d "$BODY" "$FEISHU_WEBHOOK_URL"
