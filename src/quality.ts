@@ -20,7 +20,6 @@ const DEFAULTS = {
     '<html',
     'coming soon',
     'todo: write',
-    '占位',
     'placeholder content',
   ],
 } satisfies Required<Omit<QualityConfig, 'onFail'>>

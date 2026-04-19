@@ -67,9 +67,15 @@ describe('checkContentQuality', () => {
   })
 
   it('flags placeholder content', () => {
-    const stub = `# Today\n\n占位${'x'.repeat(300)}\n\n- a\n- b\n- c\n- d\n- e`
+    const stub = `# Today\n\nplaceholder content ${'x'.repeat(300)}\n\n- a\n- b\n- c\n- d\n- e`
     const issues = checkContentQuality(stub)
     expect(issues.map((i) => i.rule)).toContain('forbid-pattern')
+  })
+
+  it('does not false-positive on common Chinese word 占位 in real content', () => {
+    const real = `# Daily\n\n这篇文章讨论了占位符在前端工程中的最佳实践。${'x'.repeat(300)}\n\n- 真实\n- 内容\n- 不\n- 应\n- 误判`
+    const issues = checkContentQuality(real)
+    expect(issues.map((i) => i.rule)).not.toContain('forbid-pattern')
   })
 
   it('flags content lacking markdown signal', () => {
