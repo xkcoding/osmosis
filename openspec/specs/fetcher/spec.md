@@ -36,6 +36,7 @@ interface Fetcher {
 | `github-release` | 监听仓库新 Release | `repo`, `include_prerelease` | P1 |
 | `github-commits` | 汇总 commit 信息 | `repo`, `branch`, `since` | P2 |
 | `rss` | 通用 RSS/Atom feed | `feed_url`, `item_count` | P1 |
+| `aihot` | AI HOT REST API（日报 + 精选合并） | 无（端点 / take 全硬编码） | P0 |
 
 ## github-file 配置详情
 
