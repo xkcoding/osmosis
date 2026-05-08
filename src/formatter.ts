@@ -13,6 +13,9 @@ export function formatForObsidian(result: FetchResult, options: FormatOptions): 
     date_saved: result.date,
     ...(options.frontmatter ?? {}),
   }
+  if (result.notifyBody && result.notifyBody.length > 0) {
+    fm.notify_body = result.notifyBody
+  }
 
   const fmBlock = stringifyYaml(fm).trim()
 
