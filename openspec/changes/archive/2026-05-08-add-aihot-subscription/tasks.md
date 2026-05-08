@@ -46,21 +46,18 @@
 
 - [x] 4.1 创建 `subscriptions/aihot.yml`（参考 design.md 结构；`summary: false`；`take=20` 由 fetcher 内部硬编码）
 - [x] 4.2 `pnpm check` 全部通过（typecheck + lint + 全部测试）
-- [ ] 4.3 本地 smoke：北京 08:00 后运行 `GITHUB_TOKEN=ghp_xxx TARGET_REPO=xkcoding/second-brain pnpm fetch --subscription aihot --output-dir /tmp/vault`，检查
-  - 输出文件名 `2026-XX-XX - AI HOT.md`
-  - frontmatter 含 `notify_body: |` 块
-  - markdown 含 lead + 至少一个 section + 精选池
-- [ ] 4.4 northwest 边界 smoke：在北京 08:00 前手动调用日报端点确认 404 路径（或 mock 注入）→ fetcher 返回 null
+- [x] 4.3 端到端验证（替代本地 smoke）：workflow run #25540152079 + #25540532681 实跑通过，second-brain PR #45 创建，notify_body 含全 5 段日报 + 精选池，飞书 IM 卡发送成功
+- [x] 4.4 404 路径已被 fetcher 单测覆盖（mock 注入 → fetcher 返回 null，未触发精选请求）
 
 ## 5. 重构与文档
 
 - [x] 5.1 重构：常量与 typed 守卫已位于 `src/fetchers/aihot.ts` 模块顶部，单文件
 - [x] 5.2 在 `contributing/add-fetcher.md` 增补「pre-baked notify body」章节，示范 `notifyBody` 字段用法
 - [x] 5.3 在 `CLAUDE.md` 的「Memory-style notes」末尾追加 AI HOT API 不变量提醒（UA 必带、cursor 黑盒、7 天窗口、limit 600/min）+ pre-baked notify body 说明
-- [ ] 5.4 archive 阶段在 `openspec/specs/fetcher/spec.md`「已规划的 Fetcher 类型」表格补 `aihot` 行（apply 阶段不动 specs/，留给 archive）
+- [x] 5.4 archive 阶段在 `openspec/specs/fetcher/spec.md`「已规划的 Fetcher 类型」表格补 `aihot` 行
 
 ## 6. 验收
 
 - [x] 6.1 `pnpm check` 全部通过
-- [ ] 6.2 PR 触发 CI 通过
-- [ ] 6.3 合并后等待下一次 hourly cron 验证端到端（PR 创建 + IM 卡推送）
+- [x] 6.2 PR #1 + PR #2 CI 通过，已 squash merge
+- [x] 6.3 workflow_dispatch run #25540532681 端到端验证：second-brain PR #45 + 飞书 IM 卡（含完整日报 + 精选池）
