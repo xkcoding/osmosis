@@ -4,7 +4,7 @@ import { todayParts } from '../template.js'
 const BASE_URL = 'https://aihot.virxact.com'
 const USER_AGENT = 'osmosis/1.0 (+https://github.com/xkcoding/osmosis)'
 const SELECTED_TAKE = 20
-const NOTIFY_BODY_MAX_BYTES = 4096
+const NOTIFY_BODY_MAX_BYTES = 20480
 const TRUNCATION_SUFFIX = '…\n（已截断）'
 
 const SECTION_EMOJI: Record<string, string> = {
@@ -179,7 +179,7 @@ export const aihotFetcher: Fetcher = {
     const dailyMd = renderDailyMarkdown(daily)
     const selectedMd = renderSelectedMarkdown(selected)
     const content = [dailyMd, selectedMd].filter((s) => s.length > 0).join('\n\n---\n\n')
-    const notifyBody = truncateNotifyBody(dailyMd)
+    const notifyBody = truncateNotifyBody(content)
 
     return {
       title: 'AI HOT 日报',

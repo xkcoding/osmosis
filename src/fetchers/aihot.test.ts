@@ -132,6 +132,15 @@ describe('aihotFetcher', () => {
     expect(result!.notifyBody).toBeDefined()
     expect(result!.notifyBody).toContain('today major AI events overview.')
     expect(result!.notifyBody).toContain('模型发布/更新')
+    expect(result!.notifyBody).toContain('精选池')
+    expect(result!.notifyBody).toContain('GPT-OSS-70B open sourced')
+  })
+
+  it('omits selected section from notifyBody when selected is empty', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResp(200, dailyOk))
+    fetchMock.mockResolvedValueOnce(jsonResp(200, { ...itemsOk, items: [] }))
+    const result = await aihotFetcher.fetch({ type: 'aihot' })
+    expect(result!.notifyBody).toContain('模型发布/更新')
     expect(result!.notifyBody).not.toContain('精选池')
   })
 
@@ -174,13 +183,13 @@ describe('aihotFetcher', () => {
     expect(result!.content).not.toMatch(/No-summary item.*\n {2}null/)
   })
 
-  it('truncates notifyBody to <= 4096 bytes with the truncation suffix', async () => {
+  it('truncates notifyBody to <= 20480 bytes with the truncation suffix', async () => {
     const huge = {
       ...dailyOk,
       sections: [
         {
           label: '模型发布/更新',
-          items: Array.from({ length: 200 }, (_, i) => ({
+          items: Array.from({ length: 1200 }, (_, i) => ({
             title: `Title ${i}`.padEnd(80, 'x'),
             summary: 'Summary '.padEnd(120, 'y'),
             sourceUrl: 'https://example.com',
@@ -193,7 +202,7 @@ describe('aihotFetcher', () => {
     fetchMock.mockResolvedValueOnce(jsonResp(200, huge))
     fetchMock.mockResolvedValueOnce(jsonResp(200, { ...itemsOk, items: [] }))
     const result = await aihotFetcher.fetch({ type: 'aihot' })
-    expect(Buffer.byteLength(result!.notifyBody!, 'utf8')).toBeLessThanOrEqual(4096)
+    expect(Buffer.byteLength(result!.notifyBody!, 'utf8')).toBeLessThanOrEqual(20480)
     expect(result!.notifyBody!.endsWith('…\n（已截断）')).toBe(true)
   })
 
