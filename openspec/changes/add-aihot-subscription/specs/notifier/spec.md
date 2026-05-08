@@ -1,0 +1,39 @@
+## ADDED Requirements
+
+### Requirement: pre-baked notify body 路径
+
+当订阅配置 `output.notify.summary === false` 时，summarize 阶段 SHALL 检查同步到 PR 的 markdown 文件 frontmatter 是否含 `notify_body` 字段：
+
+- 若含 `notify_body`：SHALL 使用该字段值作为 `summary-sections.json` 中该源的 `summary` 文本，跳过 LLM 调用，但仍把该 section 加入数组，使 notify 阶段正常推送 IM 卡。
+- 若不含 `notify_body`：SHALL 维持现有行为（跳过该源，不入 `summary-sections.json`），保留向后兼容的「完全静默」语义。
+
+当订阅配置 `output.notify.summary === true`（或缺省）时，summarize 阶段 SHALL 忽略 `notify_body` frontmatter，照常调用 LLM 生成摘要。
+
+#### Scenario: summary:false + 含 notify_body
+
+- **WHEN** 订阅 yaml 设置 `output.notify.summary: false`，且 PR 同步的 markdown frontmatter 含 `notify_body: "..."`
+- **THEN** summarize 阶段不调用 LLM，但 `summary-sections.json` 内含该源条目，其 `summary` 字段值等于 `notify_body` 字段值；notify 阶段正常推送 IM 卡
+
+#### Scenario: summary:false + 无 notify_body
+
+- **WHEN** 订阅 yaml 设置 `output.notify.summary: false`，且 markdown frontmatter 不含 `notify_body`
+- **THEN** summarize 阶段跳过该源，`summary-sections.json` 中无该源条目，notify 阶段不推送
+
+#### Scenario: summary:true 时忽略 notify_body
+
+- **WHEN** 订阅 yaml 设置 `output.notify.summary: true`（或省略 summary 字段），且 markdown frontmatter 含 `notify_body`
+- **THEN** summarize 阶段照常调用 LLM；`summary-sections.json` 中该源的 `summary` 字段值为 LLM 输出而非 `notify_body`
+
+### Requirement: notify_body frontmatter 持久化
+
+formatter（`formatForObsidian`）SHALL 在 `FetchResult.notifyBody` 字段非空时，将其写入输出 markdown 的 frontmatter `notify_body` 键，使用 YAML 多行块字符串语法（`|`）。`FetchResult.notifyBody` 为空或 `undefined` 时 MUST NOT 写入该字段。
+
+#### Scenario: fetcher 提供 notifyBody
+
+- **WHEN** fetcher 返回的 `FetchResult.notifyBody` 是非空字符串
+- **THEN** `formatForObsidian` 输出的 markdown frontmatter 含 `notify_body: |` 多行块，其内容等于 `FetchResult.notifyBody`
+
+#### Scenario: fetcher 未提供 notifyBody
+
+- **WHEN** fetcher 返回的 `FetchResult` 不含 `notifyBody`（或为 `undefined` / 空字符串）
+- **THEN** 输出 markdown frontmatter 不含 `notify_body` 键

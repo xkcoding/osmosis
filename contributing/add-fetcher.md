@@ -150,6 +150,31 @@ Confirm:
 - Frontmatter looks right
 - Body length / formatting passes the quality gate
 
+## Optional: pre-baked notify body (skip the LLM)
+
+If your source already emits a polished, IM-ready summary (e.g. an editorial daily digest from an upstream API), you don't need osmosis to summarize it again. Two pieces:
+
+1. In your fetcher, populate `FetchResult.notifyBody` with the markdown to use as the IM card body. `formatForObsidian` persists it into the synced file's frontmatter as `notify_body: |`. Keep it ≤ 4 KB; truncate with a clear suffix if longer (see `src/fetchers/aihot.ts` for a working example).
+2. In your subscription yaml, set `output.notify.summary: false`. The summarize step reads `notify_body` from the synced markdown and uses it directly — LLM is not called for this source.
+
+```ts
+return {
+  title: 'AI HOT 日报',
+  date: parts.date,
+  content: fullMarkdown,            // saved to the vault, may include extras
+  sourceUrl: 'https://aihot.virxact.com/',
+  notifyBody: leadAndSectionsOnly,  // the slice you want in IM cards
+}
+```
+
+Behavior matrix:
+
+| `notify.summary` | `notify_body` in frontmatter | Result |
+|---|---|---|
+| `true` (default) | any | LLM runs; `notify_body` ignored |
+| `false` | present | IM card uses `notify_body` verbatim; LLM not called |
+| `false` | absent | Source silently skipped (back-compat) |
+
 ## Step 8. Open the PR
 
 CI runs `pnpm check`. The next cron tick after merge picks up the new yaml automatically — no workflow edit needed.

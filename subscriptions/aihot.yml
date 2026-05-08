@@ -1,0 +1,24 @@
+name: aihot
+
+source:
+  type: aihot
+  title: AI HOT 日报
+
+output:
+  obsidian:
+    enabled: true
+    path: "00_Inbox/Clippings/{date} - AI HOT.md"
+    frontmatter:
+      type: reference
+      source: "https://aihot.virxact.com/"
+      tags:
+        - clipping/aihot
+        - AI
+        - news
+
+  notify:
+    enabled: true
+    summary: false
+    channels:
+      - wecom
+      - feishu

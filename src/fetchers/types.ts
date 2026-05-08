@@ -8,6 +8,7 @@ export interface FetchResult {
   date: string
   content: string
   sourceUrl: string
+  notifyBody?: string
 }
 
 export interface Fetcher {

@@ -8,6 +8,7 @@ import { resolveTemplate, todayParts } from './template.js'
 import { isAlreadySynced } from './dedup.js'
 import { checkContentQuality, formatIssues } from './quality.js'
 import { summarize } from './summarizer.js'
+import { buildSection } from './summarize-section.js'
 import { fetchPrFile, listSyncedPrs, markSummarySent } from './pr-listing.js'
 import { getNotifier, listChannels } from './notifiers/registry.js'
 import type { NotifyPayload } from './notifiers/types.js'
@@ -192,21 +193,27 @@ async function runSummarize(): Promise<void> {
       console.log(`[summarize] unknown subscription ${pr.sourceName}, skip`)
       continue
     }
-    if (subscription.output.notify?.summary === false) continue
-
+    const notifySummaryDisabled = subscription.output.notify?.summary === false
     const displayTitle = (subscription.source as { title?: string }).title ?? pr.sourceName
 
     try {
       const content = await fetchPrFile(targetRepo, pr.number, mdFile)
-      const promptPath = subscription.summary?.promptFile ?? DEFAULT_PROMPT_PATH
-      const promptTemplate = readFileSync(promptPath, 'utf8')
-      const text = await summarize(
-        { name: pr.sourceName, title: displayTitle, content, prUrl: pr.url },
-        promptTemplate,
-      )
-      if (text) {
-        sections.push({ sourceName: pr.sourceName, displayTitle, summary: text, prUrl: pr.url })
-      }
+      const section = await buildSection({
+        sourceName: pr.sourceName,
+        displayTitle,
+        prUrl: pr.url,
+        notifySummaryDisabled,
+        prMarkdown: content,
+        llmSummarize: async () => {
+          const promptPath = subscription.summary?.promptFile ?? DEFAULT_PROMPT_PATH
+          const promptTemplate = readFileSync(promptPath, 'utf8')
+          return summarize(
+            { name: pr.sourceName, title: displayTitle, content, prUrl: pr.url },
+            promptTemplate,
+          )
+        },
+      })
+      if (section) sections.push(section)
     } catch (err) {
       console.error(`[summarize] failed for PR #${pr.number}:`, err)
     }
