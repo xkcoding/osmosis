@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
 import { resolveTemplate, todayParts } from './template.js'
 
 describe('resolveTemplate', () => {
@@ -36,5 +36,24 @@ describe('todayParts', () => {
     const lateUtc = new Date('2026-04-17T17:00:00Z')
     const parts = todayParts(lateUtc)
     expect(parts.date).toBe('2026-04-18')
+  })
+
+  describe('OSMOSIS_DATE override', () => {
+    const ORIGINAL = process.env.OSMOSIS_DATE
+    afterEach(() => {
+      if (ORIGINAL === undefined) delete process.env.OSMOSIS_DATE
+      else process.env.OSMOSIS_DATE = ORIGINAL
+    })
+
+    it('pins today to the given date regardless of the clock', () => {
+      process.env.OSMOSIS_DATE = '2026-06-19'
+      const parts = todayParts(new Date('2026-06-22T05:00:00Z'))
+      expect(parts).toEqual({ date: '2026-06-19', year: '2026', month: '06', day: '19' })
+    })
+
+    it('throws on a malformed override', () => {
+      process.env.OSMOSIS_DATE = '06/19/2026'
+      expect(() => todayParts()).toThrow(/OSMOSIS_DATE must be YYYY-MM-DD/)
+    })
   })
 })
