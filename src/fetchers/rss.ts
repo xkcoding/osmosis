@@ -37,6 +37,16 @@ export const rssFetcher: Fetcher = {
       parseTagValue: false,
       cdataPropName: '__cdata',
       trimValues: true,
+      // fast-xml-parser caps entity expansions at 1000 to defend against
+      // "billion laughs" DOCTYPE bombs. Real daily feeds inline escaped HTML
+      // (&lt; &gt; &#8197; …) and routinely exceed that with harmless, linear
+      // predefined entities. We have no DOCTYPE-defined entities here, so raise
+      // the count/length ceilings while keeping per-entity size bounded.
+      processEntities: {
+        enabled: true,
+        maxTotalExpansions: 100_000,
+        maxExpandedLength: 5_000_000,
+      },
     })
     const obj = parser.parse(xml) as { rss?: { channel?: { item?: RssItem | RssItem[] } } }
     const rawItems = obj.rss?.channel?.item
