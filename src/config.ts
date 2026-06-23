@@ -27,6 +27,23 @@ export interface SummaryConfig {
   promptFile?: string
 }
 
+export interface ImageRehostConfig {
+  /** Turn image rehosting on for this subscription. */
+  rehost?: boolean
+  /** Output format. Default "webp". */
+  format?: 'webp' | 'jpeg' | 'png'
+  /** Encoder quality 0-100. Default 80. */
+  quality?: number
+  /** Optional max width in px; larger images are downscaled. Off by default. */
+  maxWidth?: number
+  /** OSS key sub-path under OSS_KEY_PREFIX. Default the subscription slug. */
+  keyPrefix?: string
+  /** OSS image style appended as `?x-oss-process=style/<name>`. Overrides OSS_PROCESS_STYLE. */
+  processStyle?: string
+  /** Hostnames to leave untouched (in addition to the CDN domain). */
+  skipHosts?: string[]
+}
+
 export interface Subscription {
   name: string
   source: SourceConfig
@@ -36,6 +53,7 @@ export interface Subscription {
     notify?: NotifyOutput
   }
   quality?: QualityConfig
+  images?: ImageRehostConfig
 }
 
 const SUBSCRIPTIONS_DIR = process.env.OSMOSIS_SUBSCRIPTIONS_DIR ?? 'subscriptions'

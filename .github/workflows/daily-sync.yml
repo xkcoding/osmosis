@@ -78,6 +78,14 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.TARGET_REPO_PAT }}
           TARGET_REPO: ${{ env.TARGET_REPO }}
           SUB_NAME: ${{ matrix.name }}
+          OSS_REGION: ${{ vars.OSS_REGION }}
+          OSS_ENDPOINT: ${{ vars.OSS_ENDPOINT }}
+          OSS_BUCKET: ${{ vars.OSS_BUCKET }}
+          OSS_CDN_BASE_URL: ${{ vars.OSS_CDN_BASE_URL }}
+          OSS_KEY_PREFIX: ${{ vars.OSS_KEY_PREFIX }}
+          OSS_PROCESS_STYLE: ${{ vars.OSS_PROCESS_STYLE }}
+          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
         run: pnpm tsx src/index.ts fetch --subscription "$SUB_NAME" --output-dir ../second-brain
 
       - name: Compute branch + title

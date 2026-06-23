@@ -7,6 +7,8 @@ import { formatForObsidian } from './formatter.js'
 import { resolveTemplate, todayParts } from './template.js'
 import { isAlreadySynced } from './dedup.js'
 import { checkContentQuality, formatIssues } from './quality.js'
+import { ossClientFromEnv } from './oss.js'
+import { rehostMarkdownImages } from './image-rehost.js'
 import { summarize } from './summarizer.js'
 import { buildSection } from './summarize-section.js'
 import { fetchPrFile, listSyncedPrs, markSummarySent } from './pr-listing.js'
@@ -131,6 +133,19 @@ async function runFetch(): Promise<void> {
     throw new Error(
       `Quality check failed for ${sub.name} ${parts.date}:\n${detail}\n\n--- content preview (first 500 chars) ---\n    ${preview}`,
     )
+  }
+
+  if (sub.images?.rehost) {
+    const oss = ossClientFromEnv()
+    if (oss) {
+      const r = await rehostMarkdownImages(result.content, sub.name, parts.date, sub.images, oss)
+      result.content = r.markdown
+      console.log(
+        `[fetch] ${sub.name} ${parts.date}: rehosted ${r.rehosted} images (${r.failed} failed, ${r.skipped} skipped)`,
+      )
+    } else {
+      console.warn(`[fetch] ${sub.name} ${parts.date}: image rehost enabled but OSS env not configured, skip`)
+    }
   }
 
   if (!sub.output.obsidian?.enabled) {
