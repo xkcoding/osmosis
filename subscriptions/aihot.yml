@@ -4,6 +4,14 @@ source:
   type: aihot
   title: AI HOT 日报
 
+# 抓取时把正文图片转存到自有 OSS/CDN 永久保存（OSS 连接信息走环境变量/secrets，
+# 见 contributing/image-rehost.md）。
+images:
+  rehost: true
+  format: webp
+  quality: 80
+  maxWidth: 1600
+
 output:
   obsidian:
     enabled: true
