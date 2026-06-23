@@ -24,8 +24,10 @@ images:
   #   - example.com
 ```
 
-GIFs are preserved as **animated** WebP (smaller, still plays in Obsidian's
-Chromium renderer) — do not flip sharp's `animated` flag off.
+GIFs are flattened to their **first frame** (static WebP). This is intentional:
+the production CDN serves images only through an OSS image style that rejects
+animated WebP (`BadWebPImage`) and flattens animation anyway. A static first
+frame keeps the URL working instead of 400-ing. See `src/image-compress.ts`.
 
 ## Configure OSS (env vars / secrets)
 
