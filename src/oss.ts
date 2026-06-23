@@ -30,11 +30,19 @@ export function buildPublicUrl(config: OssConfig, key: string, objectUrl: string
  * pipeline can degrade gracefully (local runs, missing secrets) instead of failing.
  */
 export function ossClientFromEnv(): { client: OSS; config: OssConfig } | null {
-  const accessKeyId = process.env.OSS_ACCESS_KEY_ID
-  const accessKeySecret = process.env.OSS_ACCESS_KEY_SECRET
-  const bucket = process.env.OSS_BUCKET
-  const region = process.env.OSS_REGION
-  const endpoint = process.env.OSS_ENDPOINT
+  // GitHub Actions passes unset `vars.X` / `secrets.X` as EMPTY STRINGS, not unset.
+  // Treat blank as absent so `?? default` works and the OSS_KEY_PREFIX namespace
+  // is never silently dropped (a dropped prefix lands keys outside the RAM policy).
+  const env = (key: string): string | undefined => {
+    const v = process.env[key]
+    return v && v.trim() ? v.trim() : undefined
+  }
+
+  const accessKeyId = env('OSS_ACCESS_KEY_ID')
+  const accessKeySecret = env('OSS_ACCESS_KEY_SECRET')
+  const bucket = env('OSS_BUCKET')
+  const region = env('OSS_REGION')
+  const endpoint = env('OSS_ENDPOINT')
 
   if (!accessKeyId || !accessKeySecret || !bucket || (!region && !endpoint)) {
     return null
@@ -46,9 +54,9 @@ export function ossClientFromEnv(): { client: OSS; config: OssConfig } | null {
     accessKeyId,
     accessKeySecret,
     bucket,
-    cdnBaseUrl: process.env.OSS_CDN_BASE_URL?.replace(/\/+$/, ''),
-    keyPrefix: (process.env.OSS_KEY_PREFIX ?? 'osmosis').replace(/^\/+|\/+$/g, ''),
-    processStyle: process.env.OSS_PROCESS_STYLE || undefined,
+    cdnBaseUrl: env('OSS_CDN_BASE_URL')?.replace(/\/+$/, ''),
+    keyPrefix: (env('OSS_KEY_PREFIX') ?? 'osmosis').replace(/^\/+|\/+$/g, ''),
+    processStyle: env('OSS_PROCESS_STYLE'),
   }
 
   const client = new OSS({
