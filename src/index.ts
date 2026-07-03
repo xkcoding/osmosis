@@ -11,9 +11,10 @@ import { ossClientFromEnv } from './oss.js'
 import { rehostMarkdownImages } from './image-rehost.js'
 import { summarize } from './summarizer.js'
 import { buildSection } from './summarize-section.js'
-import { fetchPrFile, listSyncedPrs, markSummarySent } from './pr-listing.js'
+import { fetchPrFile, fetchRecentSyncedContents, listSyncedPrs, markSummarySent } from './pr-listing.js'
 import { getNotifier, listChannels } from './notifiers/registry.js'
 import type { NotifyPayload } from './notifiers/types.js'
+import type { FetchContext } from './fetchers/types.js'
 
 const cmd = process.argv[2]
 
@@ -95,6 +96,7 @@ async function runFetch(): Promise<void> {
   const sub = loadSubscription(slug)
   const parts = todayParts()
 
+  let ctx: FetchContext | undefined
   const targetRepo = process.env.TARGET_REPO
   if (targetRepo) {
     const status = await getSyncStatus({ targetRepo, sourceName: sub.name, date: parts.date })
@@ -105,10 +107,14 @@ async function runFetch(): Promise<void> {
       writeOutput('date', parts.date)
       return
     }
+    ctx = {
+      lastSyncedAt: status.lastSyncedAt ?? undefined,
+      getRecentSyncedContents: (n) => fetchRecentSyncedContents(targetRepo, sub.name, n),
+    }
   }
 
   const fetcher = getFetcher(sub.source.type)
-  const result = await fetcher.fetch(sub.source)
+  const result = await fetcher.fetch(sub.source, ctx)
   if (!result) {
     console.log(`[fetch] ${sub.name} ${parts.date}: no content`)
     writeOutput('has_new_content', 'false')
