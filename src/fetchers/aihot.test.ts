@@ -55,6 +55,7 @@ const dailyOk = {
           summary: '1M context window GA.',
           sourceUrl: 'https://anthropic.com/x',
           sourceName: 'Anthropic Blog',
+          permalink: null,
         },
       ],
     },
@@ -69,6 +70,7 @@ const dailyOk = {
       sourceName: 'Cursor Blog',
       sourceUrl: 'https://cursor.sh/blog/v1',
       publishedAt: '2026-05-08T01:00:00.000Z',
+      permalink: null,
     },
   ],
 }
@@ -150,12 +152,12 @@ describe('aihotFetcher', () => {
     expect(result!.content).toContain('模型发布/更新')
     expect(result!.content).toContain('Claude Opus 4.7')
     expect(result!.content).toContain('快讯')
-    expect(result!.content).toContain('精选池')
+    expect(result!.content).toContain('新入选精选')
     expect(result!.content).toContain('GPT-OSS-70B open sourced')
     expect(result!.notifyBody).toBeDefined()
     expect(result!.notifyBody).toContain('today major AI events overview.')
     expect(result!.notifyBody).toContain('模型发布/更新')
-    expect(result!.notifyBody).toContain('精选池')
+    expect(result!.notifyBody).toContain('新入选精选')
     expect(result!.notifyBody).toContain('GPT-OSS-70B open sourced')
   })
 
@@ -164,7 +166,7 @@ describe('aihotFetcher', () => {
     fetchMock.mockResolvedValueOnce(jsonResp(200, { ...itemsOk, items: [] }))
     const result = await aihotFetcher.fetch({ type: 'aihot' })
     expect(result!.notifyBody).toContain('模型发布/更新')
-    expect(result!.notifyBody).not.toContain('精选池')
+    expect(result!.notifyBody).not.toContain('新入选精选')
   })
 
   it('falls back to daily-only when selected endpoint fails', async () => {
@@ -173,7 +175,7 @@ describe('aihotFetcher', () => {
     const result = await aihotFetcher.fetch({ type: 'aihot' })
     expect(result).not.toBeNull()
     expect(result!.content).toContain('today major AI events')
-    expect(result!.content).not.toContain('精选池')
+    expect(result!.content).not.toContain('新入选精选')
   })
 
   it('omits lead blockquote when lead is null and never renders the literal "null"', async () => {
@@ -357,5 +359,95 @@ describe('aihot selected window & pagination', () => {
     const [result] = await Promise.all([promise, vi.runAllTimersAsync()])
     expect(result).not.toBeNull()
     expect(result!.content).toContain('Item keep')
+  })
+})
+
+describe('aihot dedup & dual links', () => {
+  const histItem = selItem('hist', '2026-05-08T02:00:00.000Z')
+  const freshItem = selItem('fresh', '2026-05-08T02:30:00.000Z')
+
+  it('drops selected items whose permalink appeared in recent synced PRs', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResp(200, dailyOk))
+    fetchMock.mockResolvedValueOnce(jsonResp(200, itemsPage([histItem, freshItem])))
+    const ctx = {
+      getRecentSyncedContents: async () =>
+        ['# old card\n- [t](https://aihot.virxact.com/items/hist)（[原文](https://x.example/other)）'],
+    }
+    const result = await aihotFetcher.fetch({ type: 'aihot' }, ctx)
+    expect(result!.content).not.toContain('Item hist')
+    expect(result!.content).toContain('Item fresh')
+  })
+
+  it('drops selected items whose original url appeared in recent synced PRs (cross-key match)', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResp(200, dailyOk))
+    fetchMock.mockResolvedValueOnce(jsonResp(200, itemsPage([histItem, freshItem])))
+    const ctx = {
+      getRecentSyncedContents: async () => ['- [t](https://example.com/hist)'],
+    }
+    const result = await aihotFetcher.fetch({ type: 'aihot' }, ctx)
+    expect(result!.content).not.toContain('Item hist')
+    expect(result!.content).toContain('Item fresh')
+  })
+
+  it('drops selected items colliding with today daily sections, keeping the daily entry', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResp(200, dailyOk))
+    fetchMock.mockResolvedValueOnce(
+      jsonResp(200, itemsPage([selItem('dup', '2026-05-08T02:00:00.000Z', { url: 'https://anthropic.com/x' })])),
+    )
+    const result = await aihotFetcher.fetch({ type: 'aihot' })
+    expect(result!.content).toContain('Claude Opus 4.7')
+    expect(result!.content).not.toContain('Item dup')
+    expect(result!.content).not.toContain('新入选精选')
+  })
+
+  it('keeps all selected items when getRecentSyncedContents throws (degrade, never lose)', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResp(200, dailyOk))
+    fetchMock.mockResolvedValueOnce(jsonResp(200, itemsPage([freshItem])))
+    const ctx = { getRecentSyncedContents: async (): Promise<string[]> => { throw new Error('gh down') } }
+    const result = await aihotFetcher.fetch({ type: 'aihot' }, ctx)
+    expect(result!.content).toContain('Item fresh')
+  })
+
+  it('renders dual links when permalink exists, single link otherwise', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResp(200, dailyOk))
+    fetchMock.mockResolvedValueOnce(
+      jsonResp(200, itemsPage([
+        selItem('withp', '2026-05-08T02:00:00.000Z'),
+        selItem('nop', '2026-05-08T02:10:00.000Z', { permalink: null }),
+      ])),
+    )
+    const result = await aihotFetcher.fetch({ type: 'aihot' })
+    expect(result!.content).toContain(
+      '- [Item withp](https://aihot.virxact.com/items/withp) — Src（[原文](https://example.com/withp)）',
+    )
+    expect(result!.content).toContain('- [Item nop](https://example.com/nop) — Src')
+    expect(result!.content).not.toContain('(https://aihot.virxact.com/items/nop)')
+  })
+
+  it('renders daily section items with dual links when daily provides permalink', async () => {
+    const dailyWithPermalink = {
+      ...dailyOk,
+      sections: [
+        {
+          label: '模型发布/更新',
+          items: [
+            {
+              title: 'Claude Opus 4.7',
+              summary: 's',
+              sourceUrl: 'https://anthropic.com/x',
+              sourceName: 'Anthropic Blog',
+              permalink: 'https://aihot.virxact.com/items/opus47',
+            },
+          ],
+        },
+        ...dailyOk.sections.slice(1),
+      ],
+    }
+    fetchMock.mockResolvedValueOnce(jsonResp(200, dailyWithPermalink))
+    fetchMock.mockResolvedValueOnce(jsonResp(200, itemsPage([])))
+    const result = await aihotFetcher.fetch({ type: 'aihot' })
+    expect(result!.content).toContain(
+      '- [Claude Opus 4.7](https://aihot.virxact.com/items/opus47) — Anthropic Blog（[原文](https://anthropic.com/x)）',
+    )
   })
 })

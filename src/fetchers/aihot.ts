@@ -9,6 +9,7 @@ const PAGE_INTERVAL_MS = 200
 const RETRY_429_MS = 1500
 const OVERLAP_MS = 48 * 60 * 60 * 1000
 const SINCE_CAP_MS = 7 * 24 * 60 * 60 * 1000
+const RECENT_PR_COUNT = 3
 const NOTIFY_BODY_MAX_BYTES = 20480
 const TRUNCATION_SUFFIX = '…\n（已截断）'
 
@@ -30,6 +31,7 @@ interface DailySectionItem {
   summary?: string | null
   sourceUrl?: string | null
   sourceName?: string | null
+  permalink?: string | null
 }
 
 interface DailySection {
@@ -42,6 +44,7 @@ interface DailyFlash {
   sourceName?: string | null
   sourceUrl?: string | null
   publishedAt?: string | null
+  permalink?: string | null
 }
 
 interface DailyResponse {
@@ -158,6 +161,47 @@ async function fetchSelectedWindow(sinceIso: string): Promise<SelectedItem[]> {
   return collected
 }
 
+function linkLine(
+  title: string,
+  permalink: string | null | undefined,
+  originalUrl: string,
+  sourceName: string,
+): string {
+  const source = sourceName ? ` — ${sourceName}` : ''
+  if (permalink) return `- [${title}](${permalink})${source}（[原文](${originalUrl})）`
+  return `- [${title}](${originalUrl})${source}`
+}
+
+function extractLinkKeys(contents: string[]): Set<string> {
+  const keys = new Set<string>()
+  for (const md of contents) {
+    for (const m of md.matchAll(/\]\((https?:\/\/[^)\s]+)\)/g)) keys.add(m[1]!)
+  }
+  return keys
+}
+
+function dailyLinkKeys(daily: DailyResponse): Set<string> {
+  const keys = new Set<string>()
+  for (const section of daily.sections ?? []) {
+    for (const item of section.items ?? []) {
+      if (item.permalink) keys.add(item.permalink)
+      if (item.sourceUrl) keys.add(item.sourceUrl)
+    }
+  }
+  for (const f of daily.flashes ?? []) {
+    if (f.permalink) keys.add(f.permalink)
+    if (f.sourceUrl) keys.add(f.sourceUrl)
+  }
+  return keys
+}
+
+function selectedItemKeys(item: SelectedItem): string[] {
+  const keys: string[] = []
+  if (item.permalink) keys.push(item.permalink)
+  if (item.url) keys.push(item.url)
+  return keys
+}
+
 function renderDailyMarkdown(daily: DailyResponse): string {
   const lines: string[] = []
 
@@ -174,8 +218,7 @@ function renderDailyMarkdown(daily: DailyResponse): string {
     lines.push(`## ${emoji ? emoji + ' ' : ''}${section.label}`)
     for (const item of items) {
       if (!item.title || !item.sourceUrl) continue
-      const sourceName = item.sourceName ?? ''
-      lines.push(`- [${item.title}](${item.sourceUrl})${sourceName ? ` — ${sourceName}` : ''}`)
+      lines.push(linkLine(item.title, item.permalink, item.sourceUrl, item.sourceName ?? ''))
       if (typeof item.summary === 'string' && item.summary.trim()) {
         lines.push(`  ${item.summary.trim()}`)
       }
@@ -188,8 +231,7 @@ function renderDailyMarkdown(daily: DailyResponse): string {
     lines.push('## ⚡️ 快讯')
     for (const f of flashes) {
       if (!f.title || !f.sourceUrl) continue
-      const sourceName = f.sourceName ?? ''
-      lines.push(`- [${f.title}](${f.sourceUrl})${sourceName ? ` — ${sourceName}` : ''}`)
+      lines.push(linkLine(f.title, f.permalink, f.sourceUrl, f.sourceName ?? ''))
     }
     lines.push('')
   }
@@ -198,17 +240,16 @@ function renderDailyMarkdown(daily: DailyResponse): string {
 }
 
 function renderSelectedMarkdown(items: SelectedItem[]): string {
-  if (items.length === 0) return ''
-  const lines: string[] = ['## 🔥 精选池（过去 24 小时）']
+  const lines: string[] = []
   for (const item of items) {
     if (!item.title || !item.url) continue
-    const source = item.source ?? ''
-    lines.push(`- [${item.title}](${item.url})${source ? ` — ${source}` : ''}`)
+    lines.push(linkLine(item.title, item.permalink, item.url, item.source ?? ''))
     if (typeof item.summary === 'string' && item.summary.trim()) {
       lines.push(`  ${item.summary.trim()}`)
     }
   }
-  return lines.join('\n').trim()
+  if (lines.length === 0) return ''
+  return ['## 🔥 新入选精选', ...lines].join('\n').trim()
 }
 
 function truncateNotifyBody(s: string): string {
@@ -229,7 +270,21 @@ export const aihotFetcher: Fetcher = {
     const daily = await fetchDaily(parts.date)
     if (!daily) return null
 
-    const selected = await fetchSelectedWindow(computeSinceIso(ctx?.lastSyncedAt))
+    let selected = await fetchSelectedWindow(computeSinceIso(ctx?.lastSyncedAt))
+    if (selected.length > 0) {
+      let pushedKeys = new Set<string>()
+      if (ctx?.getRecentSyncedContents) {
+        try {
+          pushedKeys = extractLinkKeys(await ctx.getRecentSyncedContents(RECENT_PR_COUNT))
+        } catch (err) {
+          console.warn('[aihot] recent PR contents unavailable, dedup degraded to empty set:', err)
+        }
+      }
+      const dailyKeys = dailyLinkKeys(daily)
+      selected = selected.filter(
+        (item) => !selectedItemKeys(item).some((k) => pushedKeys.has(k) || dailyKeys.has(k)),
+      )
+    }
 
     const dailyMd = renderDailyMarkdown(daily)
     const selectedMd = renderSelectedMarkdown(selected)
