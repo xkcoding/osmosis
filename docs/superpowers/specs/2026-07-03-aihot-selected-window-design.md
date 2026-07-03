@@ -16,9 +16,14 @@ AI HOT 源的推送存在系统性遗漏。整条流水线是"每源每天一张
 
 ## 决策
 
-精选池窗口改为**推送时刻到推送时刻无缝拼接**（push-to-push tiling）：每次抓取拉「上次推送之后 → 现在」的全部精选条目。不依赖上游窗口定义；cron 漏跑一天，下一次推送自动补上缺口（items API `since` 上限 7 天，自动截断）。
+核心目标是把"条目随时入选"的**连续流**离散成**日快照**且零遗漏。API 只能按 `publishedAt`（发布时间）做窗口查询，而流的真实事件轴是**入选时间**——两轴错位（条目可先发布、后入选；spec 自己警告慢推 RSS 源有时间撕裂）。因此**任何按时间精确分窗的方案都存在结构性遗漏**，正确解法是：
 
-"上次推送时间"来源：**上一个已同步 PR 的 `createdAt`**——沿用"去重模型 = 问 GitHub"的约定，零新状态、无数据库。
+**粗窗口 + 精确集合去重**：
+
+- 窗口放粗到足以覆盖任何现实的入选滞后：`since = min(lastSyncedAt, now − 48h)`，clamp 到 `now − 7d`（API 硬上限）。cron 漏跑多天时 `lastSyncedAt` 自动拉长窗口补缺口。
+- 去重不靠时间靠**已推送条目集合**：回读最近几个已同步 aihot PR 的 markdown，提取站内 permalink（`/items/{id}`，条目稳定 id）与原文 url 作为去重键集合，窗口内已推过的条目直接丢弃。
+
+状态来源仍是"问 GitHub"（PR `createdAt` + PR 文件内容），零新状态、无数据库。
 
 范围外（明确不做）：
 
@@ -40,34 +45,40 @@ AI HOT 源的推送存在系统性遗漏。整条流水线是"每源每天一张
 
 ```ts
 export interface FetchContext {
-  lastSyncedAt?: string  // ISO datetime，本源上一个已同步 PR 的创建时间
+  lastSyncedAt?: string
+  // 懒加载：最近 n 个已同步 PR 的 markdown 内容（新→旧），仅需要历史的 fetcher 调用
+  getRecentSyncedContents?: (n: number) => Promise<string[]>
 }
 // Fetcher.fetch(config: SourceConfig, ctx?: FetchContext)
 ```
 
-`runFetch` 把 `getSyncStatus` 返回的 `lastSyncedAt` 传入。通用机制，其他 fetcher 忽略该参数——符合插件架构，不特判源名。
+`runFetch` 传入 `lastSyncedAt` 与基于 `fetchPrFile`（`src/pr-listing.ts`，复用）实现的懒加载回调。fetcher 不直接碰 gh，分层不破；通用机制，其他 fetcher 忽略即可，不特判源名。
 
 ### 3. aihot fetcher 抓取逻辑（`src/fetchers/aihot.ts`）
 
-**窗口**：
+**窗口（粗，只负责"必然覆盖"）**：
 
-- `since = lastSyncedAt − 30min`（缓冲覆盖上次"抓取 → PR 创建"的间隙及轻微入选滞后）。
-- 无 `lastSyncedAt`（首次运行 / 7 天内无 PR）→ 回退 `now − 24h`。
-- 已知权衡：缓冲窗口内昨天已推过的精选条目可能重复出现一次（卡片内去重只对比当天日报，不回读昨天的推送内容）。概率低、代价小，v1 接受；如实际观察到再叠加"回读上一 PR 文件按 url 去重"。
+- `since = min(lastSyncedAt, now − 48h)`，clamp 到 `now − 7d`；无 `lastSyncedAt` → `now − 48h`。
+- 48h 重叠覆盖入选滞后；重叠产生的重复由下面的集合去重消除，不依赖时间精度。
+
+**已推送集合（准，负责"必然不重"）**：
+
+- 经 `ctx.getRecentSyncedContents(3)` 回读最近 3 个已同步 PR 的 markdown（3 × 24h ≥ 窗口 48h + 余量）。
+- 用正则提取两类键：站内 permalink `aihot.virxact.com/items/{id}`（精确、稳定）与所有 markdown 链接 url。
+- 回读失败（gh 出错等）不阻塞抓取：降级为空集合，宁可偶尔重复不因此漏推，记 warn 日志。
 
 **翻页拿全**（`mode=selected`）：
 
 - `take=100`，用响应 `nextCursor` 翻页。
-- 终止：页内出现 `publishedAt < since` 的条目即停（该条目及更旧的全部丢弃）。
+- 终止：页内出现**非 null** `publishedAt < since` 的条目即停（该条目及更旧的全部丢弃）；`publishedAt` 为 null 的条目跳过、不参与终止判定。
 - 防护（cursor 失效会静默回首屏而不报错）：按条目 `id` 去重；整页无新 id 即停；最多 5 页硬上限。
-- `publishedAt` 为 null 的条目跳过（无法参与窗口判定，避免跨天重复推送）。
 - 页间 200ms 间隔（spec 建议）。
 
 **429 处理**：`getJson` 遇 429 退避 1.5 秒重试一次，仍失败按现有降级路径处理（daily 抛错、selected 降级为空）。
 
 ### 4. 渲染与去重
 
-**卡片内去重**：精选条目若已出现在当天日报 sections 中则丢弃（日报版带 LLM 摘要，优先保留）。去重 key = `permalink ?? url`（同一条目在两个端点的 permalink 同源 `/items/{id}`，比第三方 url 更可靠）。需要为 `DailySectionItem`/`DailyFlash` 接口补充 `permalink` 字段。
+**去重规则（统一）**：每个条目产出**两个键**——`permalink` 与原文 `url`——全部入集合，**任一命中即视为重复**。不使用 `permalink ?? url` 单键（daily sections 的 permalink 可为 null，混合单键会失配漏去重）。精选条目依次对比：① 已推送集合（历史 PR）；② 当天日报 sections / flashes 的键集合（撞上时保留日报版，它带 LLM 摘要）。需要为 `DailySectionItem`/`DailyFlash` 接口补充 `permalink` 字段。
 
 **双链接格式**（日报 sections、精选池、快讯统一）：
 
@@ -88,17 +99,20 @@ export interface FetchContext {
 | selected 端点非 429 错误 | 现状保留：降级为 daily-only |
 | 429（daily 或 selected） | 退避 1.5s 重试一次，再失败走上一行 |
 | cursor 静默回首屏 | id 去重 + 整页无新 id 即停 + 5 页硬上限 |
-| `lastSyncedAt` 超过 7 天 | 服务端自动把 since 截到 7 天前，正常返回 |
-| `publishedAt` 为 null | 条目跳过 |
+| `lastSyncedAt` 超过 7 天 | since clamp 到 now − 7d（同服务端硬上限行为一致） |
+| `publishedAt` 为 null | 条目跳过，不参与翻页终止判定 |
+| 回读历史 PR 失败 | 去重集合降级为空，宁重勿漏，记 warn |
 
 ## 测试计划（`src/fetchers/aihot.test.ts` 扩展）
 
-1. 翻页在 `publishedAt < since` 边界正确终止且过滤旧条目。
-2. cursor 回首屏（返回重复 id）时循环终止。
-3. 精选条目与日报 sections 按 `permalink ?? url` 去重。
-4. 双链接渲染：有/无 permalink 两种格式。
-5. 无 `lastSyncedAt` 时回退 `now − 24h`。
-6. 429 重试一次后成功 / 仍失败降级。
-7. `getSyncStatus`：`syncedToday` 与 `lastSyncedAt` 的组合场景（`src/dedup.ts` 对应测试）。
+1. 翻页在非 null `publishedAt < since` 边界正确终止且过滤旧条目；null `publishedAt` 条目被跳过且不触发终止。
+2. cursor 回首屏（返回重复 id）时循环终止；5 页硬上限生效。
+3. 双键去重：历史 PR 中仅出现原文 url（无 permalink）时，同条目的精选（有 permalink）仍被判重；反向亦然。
+4. 精选与当天日报撞条目时保留日报版。
+5. 窗口计算：`min(lastSyncedAt, now − 48h)`、7 天 clamp、无 `lastSyncedAt` 回退 `now − 48h`。
+6. `getRecentSyncedContents` 抛错时降级为空集合，抓取不中断。
+7. 双链接渲染：有/无 permalink 两种格式。
+8. 429 重试一次后成功 / 仍失败降级。
+9. `getSyncStatus`：`syncedToday` 与 `lastSyncedAt` 的组合场景（`src/dedup.ts` 对应测试）。
 
 验收：`pnpm check` 全绿。
