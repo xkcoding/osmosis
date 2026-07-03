@@ -55,6 +55,7 @@ const dailyOk = {
           summary: '1M context window GA.',
           sourceUrl: 'https://anthropic.com/x',
           sourceName: 'Anthropic Blog',
+          permalink: null,
         },
       ],
     },
@@ -69,6 +70,7 @@ const dailyOk = {
       sourceName: 'Cursor Blog',
       sourceUrl: 'https://cursor.sh/blog/v1',
       publishedAt: '2026-05-08T01:00:00.000Z',
+      permalink: null,
     },
   ],
 }
@@ -83,6 +85,7 @@ const itemsOk = {
       title: 'GPT-OSS-70B open sourced',
       title_en: null,
       url: 'https://openai.com/blog/gpt-oss',
+      permalink: null,
       source: 'OpenAI Blog',
       publishedAt: '2026-05-08T02:15:00.000Z',
       summary: 'OpenAI open-sources 70B model.',
@@ -93,12 +96,34 @@ const itemsOk = {
       title: 'No-summary item',
       title_en: null,
       url: 'https://example.com/b',
+      permalink: null,
       source: 'Example',
       publishedAt: null,
       summary: null,
       category: null,
     },
   ],
+}
+
+function itemsPage(
+  items: unknown[],
+  opts: { hasNext?: boolean; nextCursor?: string | null } = {},
+): unknown {
+  return { count: items.length, hasNext: opts.hasNext ?? false, nextCursor: opts.nextCursor ?? null, items }
+}
+
+function selItem(id: string, publishedAt: string | null, extra: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id,
+    title: `Item ${id}`,
+    url: `https://example.com/${id}`,
+    permalink: `https://aihot.virxact.com/items/${id}`,
+    source: 'Src',
+    publishedAt,
+    summary: null,
+    category: null,
+    ...extra,
+  }
 }
 
 describe('aihotFetcher', () => {
@@ -127,12 +152,12 @@ describe('aihotFetcher', () => {
     expect(result!.content).toContain('模型发布/更新')
     expect(result!.content).toContain('Claude Opus 4.7')
     expect(result!.content).toContain('快讯')
-    expect(result!.content).toContain('精选池')
+    expect(result!.content).toContain('新入选精选')
     expect(result!.content).toContain('GPT-OSS-70B open sourced')
     expect(result!.notifyBody).toBeDefined()
     expect(result!.notifyBody).toContain('today major AI events overview.')
     expect(result!.notifyBody).toContain('模型发布/更新')
-    expect(result!.notifyBody).toContain('精选池')
+    expect(result!.notifyBody).toContain('新入选精选')
     expect(result!.notifyBody).toContain('GPT-OSS-70B open sourced')
   })
 
@@ -141,7 +166,7 @@ describe('aihotFetcher', () => {
     fetchMock.mockResolvedValueOnce(jsonResp(200, { ...itemsOk, items: [] }))
     const result = await aihotFetcher.fetch({ type: 'aihot' })
     expect(result!.notifyBody).toContain('模型发布/更新')
-    expect(result!.notifyBody).not.toContain('精选池')
+    expect(result!.notifyBody).not.toContain('新入选精选')
   })
 
   it('falls back to daily-only when selected endpoint fails', async () => {
@@ -150,7 +175,7 @@ describe('aihotFetcher', () => {
     const result = await aihotFetcher.fetch({ type: 'aihot' })
     expect(result).not.toBeNull()
     expect(result!.content).toContain('today major AI events')
-    expect(result!.content).not.toContain('精选池')
+    expect(result!.content).not.toContain('新入选精选')
   })
 
   it('omits lead blockquote when lead is null and never renders the literal "null"', async () => {
@@ -177,7 +202,9 @@ describe('aihotFetcher', () => {
 
   it('renders selected items with null summary as title-only line', async () => {
     fetchMock.mockResolvedValueOnce(jsonResp(200, dailyOk))
-    fetchMock.mockResolvedValueOnce(jsonResp(200, { ...itemsOk, items: [itemsOk.items[1]] }))
+    fetchMock.mockResolvedValueOnce(
+      jsonResp(200, { ...itemsOk, items: [{ ...itemsOk.items[1], publishedAt: '2026-05-08T03:00:00.000Z' }] }),
+    )
     const result = await aihotFetcher.fetch({ type: 'aihot' })
     expect(result!.content).toContain('No-summary item')
     expect(result!.content).not.toMatch(/No-summary item.*\n {2}null/)
@@ -219,14 +246,238 @@ describe('aihotFetcher', () => {
     }
   })
 
-  it('passes since=todayUtcMidnightIso and take=20 to selected endpoint', async () => {
+  it('passes 48h-window since and take=100 to selected endpoint when no ctx', async () => {
     fetchMock.mockResolvedValueOnce(jsonResp(200, dailyOk))
     fetchMock.mockResolvedValueOnce(jsonResp(200, itemsOk))
     await aihotFetcher.fetch({ type: 'aihot' })
     const itemsUrl = fetchMock.mock.calls[1]![0] as string
     expect(itemsUrl).toContain('mode=selected')
-    expect(itemsUrl).toContain('take=20')
-    // FIXED_NOW is 2026-05-08T05:00:00Z, BJT date is 2026-05-08, UTC midnight = 2026-05-08T00:00:00.000Z
-    expect(decodeURIComponent(itemsUrl)).toContain('since=2026-05-08T00:00:00.000Z')
+    expect(itemsUrl).toContain('take=100')
+    // FIXED_NOW 2026-05-08T05:00:00Z − 48h
+    expect(decodeURIComponent(itemsUrl)).toContain('since=2026-05-06T05:00:00.000Z')
+  })
+})
+
+describe('aihot selected window & pagination', () => {
+  it('uses min(lastSyncedAt, now-48h) as since', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResp(200, dailyOk))
+    fetchMock.mockResolvedValueOnce(jsonResp(200, itemsPage([])))
+    // lastSyncedAt (05-03) older than now-48h (05-06T05:00) → wins
+    await aihotFetcher.fetch({ type: 'aihot' }, { lastSyncedAt: '2026-05-03T00:00:00.000Z' })
+    expect(decodeURIComponent(fetchMock.mock.calls[1]![0] as string)).toContain('since=2026-05-03T00:00:00.000Z')
+  })
+
+  it('clamps since to now-7d', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResp(200, dailyOk))
+    fetchMock.mockResolvedValueOnce(jsonResp(200, itemsPage([])))
+    await aihotFetcher.fetch({ type: 'aihot' }, { lastSyncedAt: '2026-04-01T00:00:00.000Z' })
+    expect(decodeURIComponent(fetchMock.mock.calls[1]![0] as string)).toContain('since=2026-05-01T05:00:00.000Z')
+  })
+
+  it('paginates with nextCursor and 200ms gap, merging pages', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResp(200, dailyOk))
+    fetchMock.mockResolvedValueOnce(
+      jsonResp(200, itemsPage([selItem('p1', '2026-05-08T02:00:00.000Z')], { hasNext: true, nextCursor: 'c1' })),
+    )
+    fetchMock.mockResolvedValueOnce(jsonResp(200, itemsPage([selItem('p2', '2026-05-08T01:00:00.000Z')])))
+    const promise = aihotFetcher.fetch({ type: 'aihot' })
+    const [result] = await Promise.all([promise, vi.runAllTimersAsync()])
+    expect(result!.content).toContain('Item p1')
+    expect(result!.content).toContain('Item p2')
+    expect(decodeURIComponent(fetchMock.mock.calls[2]![0] as string)).toContain('cursor=c1')
+  })
+
+  it('stops at the first non-null publishedAt older than since and drops it', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResp(200, dailyOk))
+    fetchMock.mockResolvedValueOnce(
+      jsonResp(200, itemsPage(
+        [selItem('new1', '2026-05-08T02:00:00.000Z'), selItem('old1', '2026-05-01T00:00:00.000Z')],
+        { hasNext: true, nextCursor: 'c1' },
+      )),
+    )
+    const result = await aihotFetcher.fetch({ type: 'aihot' })
+    expect(result!.content).toContain('Item new1')
+    expect(result!.content).not.toContain('Item old1')
+    expect(fetchMock).toHaveBeenCalledTimes(2) // daily + 1 page，未跟进 cursor
+  })
+
+  it('keeps null-publishedAt items without terminating pagination', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResp(200, dailyOk))
+    fetchMock.mockResolvedValueOnce(
+      jsonResp(200, itemsPage(
+        [selItem('nullpub', null), selItem('good', '2026-05-08T02:00:00.000Z')],
+      )),
+    )
+    const result = await aihotFetcher.fetch({ type: 'aihot' })
+    expect(result!.content).toContain('Item nullpub')
+    expect(result!.content).toContain('Item good')
+  })
+
+  it('dedups null-publishedAt items against pushed set like any other item', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResp(200, dailyOk))
+    fetchMock.mockResolvedValueOnce(jsonResp(200, itemsPage([selItem('nullpub', null)])))
+    const ctx = {
+      getRecentSyncedContents: async () => ['- [t](https://aihot.virxact.com/items/nullpub)'],
+    }
+    const result = await aihotFetcher.fetch({ type: 'aihot' }, ctx)
+    expect(result!.content).not.toContain('Item nullpub')
+  })
+
+  it('renders a visible truncation notice when page cap is hit with more pages advertised', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResp(200, dailyOk))
+    for (let i = 0; i < 5; i++) {
+      fetchMock.mockResolvedValueOnce(
+        jsonResp(200, itemsPage([selItem(`pg${i}`, '2026-05-08T02:00:00.000Z')], { hasNext: true, nextCursor: `c${i}` })),
+      )
+    }
+    const promise = aihotFetcher.fetch({ type: 'aihot' })
+    const [result] = await Promise.all([promise, vi.runAllTimersAsync()])
+    expect(fetchMock).toHaveBeenCalledTimes(6)
+    expect(result!.content).toContain('已达单次抓取上限')
+  })
+
+  it('renders no truncation notice when pagination ends naturally', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResp(200, dailyOk))
+    fetchMock.mockResolvedValueOnce(jsonResp(200, itemsPage([selItem('only', '2026-05-08T02:00:00.000Z')])))
+    const result = await aihotFetcher.fetch({ type: 'aihot' })
+    expect(result!.content).not.toContain('已达单次抓取上限')
+  })
+
+  it('stops when a page yields no new ids (cursor silently reset)', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResp(200, dailyOk))
+    fetchMock.mockResolvedValueOnce(
+      jsonResp(200, itemsPage([selItem('x', '2026-05-08T02:00:00.000Z')], { hasNext: true, nextCursor: 'c1' })),
+    )
+    fetchMock.mockResolvedValueOnce(
+      jsonResp(200, itemsPage([selItem('x', '2026-05-08T02:00:00.000Z')], { hasNext: true, nextCursor: 'c2' })),
+    )
+    const promise = aihotFetcher.fetch({ type: 'aihot' })
+    const [result] = await Promise.all([promise, vi.runAllTimersAsync()])
+    expect(fetchMock).toHaveBeenCalledTimes(3) // daily + 2 pages，第三页不再请求
+    expect(result!.content).toContain('Item x')
+  })
+
+  it('hard-caps pagination at 5 pages', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResp(200, dailyOk))
+    for (let i = 0; i < 6; i++) {
+      fetchMock.mockResolvedValueOnce(
+        jsonResp(200, itemsPage([selItem(`pg${i}`, '2026-05-08T02:00:00.000Z')], { hasNext: true, nextCursor: `c${i}` })),
+      )
+    }
+    const promise = aihotFetcher.fetch({ type: 'aihot' })
+    await Promise.all([promise, vi.runAllTimersAsync()])
+    expect(fetchMock).toHaveBeenCalledTimes(6) // daily + 5 pages
+  })
+
+  it('retries once with backoff on 429 (daily), then succeeds', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResp(429, { error: 'rate_limited' }))
+    fetchMock.mockResolvedValueOnce(jsonResp(200, dailyOk))
+    fetchMock.mockResolvedValueOnce(jsonResp(200, itemsPage([])))
+    const promise = aihotFetcher.fetch({ type: 'aihot' })
+    const [result] = await Promise.all([promise, vi.runAllTimersAsync()])
+    expect(result).not.toBeNull()
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('degrades selected to collected-so-far when a later page errors', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResp(200, dailyOk))
+    fetchMock.mockResolvedValueOnce(
+      jsonResp(200, itemsPage([selItem('keep', '2026-05-08T02:00:00.000Z')], { hasNext: true, nextCursor: 'c1' })),
+    )
+    fetchMock.mockResolvedValueOnce(jsonResp(503, { error: 'boom' }))
+    const promise = aihotFetcher.fetch({ type: 'aihot' })
+    const [result] = await Promise.all([promise, vi.runAllTimersAsync()])
+    expect(result).not.toBeNull()
+    expect(result!.content).toContain('Item keep')
+  })
+})
+
+describe('aihot dedup & dual links', () => {
+  const histItem = selItem('hist', '2026-05-08T02:00:00.000Z')
+  const freshItem = selItem('fresh', '2026-05-08T02:30:00.000Z')
+
+  it('drops selected items whose permalink appeared in recent synced PRs', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResp(200, dailyOk))
+    fetchMock.mockResolvedValueOnce(jsonResp(200, itemsPage([histItem, freshItem])))
+    const ctx = {
+      getRecentSyncedContents: async () =>
+        ['# old card\n- [t](https://aihot.virxact.com/items/hist)（[原文](https://x.example/other)）'],
+    }
+    const result = await aihotFetcher.fetch({ type: 'aihot' }, ctx)
+    expect(result!.content).not.toContain('Item hist')
+    expect(result!.content).toContain('Item fresh')
+  })
+
+  it('drops selected items whose original url appeared in recent synced PRs (cross-key match)', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResp(200, dailyOk))
+    fetchMock.mockResolvedValueOnce(jsonResp(200, itemsPage([histItem, freshItem])))
+    const ctx = {
+      getRecentSyncedContents: async () => ['- [t](https://example.com/hist)'],
+    }
+    const result = await aihotFetcher.fetch({ type: 'aihot' }, ctx)
+    expect(result!.content).not.toContain('Item hist')
+    expect(result!.content).toContain('Item fresh')
+  })
+
+  it('drops selected items colliding with today daily sections, keeping the daily entry', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResp(200, dailyOk))
+    fetchMock.mockResolvedValueOnce(
+      jsonResp(200, itemsPage([selItem('dup', '2026-05-08T02:00:00.000Z', { url: 'https://anthropic.com/x' })])),
+    )
+    const result = await aihotFetcher.fetch({ type: 'aihot' })
+    expect(result!.content).toContain('Claude Opus 4.7')
+    expect(result!.content).not.toContain('Item dup')
+    expect(result!.content).not.toContain('新入选精选')
+  })
+
+  it('keeps all selected items when getRecentSyncedContents throws (degrade, never lose)', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResp(200, dailyOk))
+    fetchMock.mockResolvedValueOnce(jsonResp(200, itemsPage([freshItem])))
+    const ctx = { getRecentSyncedContents: async (): Promise<string[]> => { throw new Error('gh down') } }
+    const result = await aihotFetcher.fetch({ type: 'aihot' }, ctx)
+    expect(result!.content).toContain('Item fresh')
+  })
+
+  it('renders dual links when permalink exists, single link otherwise', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResp(200, dailyOk))
+    fetchMock.mockResolvedValueOnce(
+      jsonResp(200, itemsPage([
+        selItem('withp', '2026-05-08T02:00:00.000Z'),
+        selItem('nop', '2026-05-08T02:10:00.000Z', { permalink: null }),
+      ])),
+    )
+    const result = await aihotFetcher.fetch({ type: 'aihot' })
+    expect(result!.content).toContain(
+      '- [Item withp](https://aihot.virxact.com/items/withp) — Src（[原文](https://example.com/withp)）',
+    )
+    expect(result!.content).toContain('- [Item nop](https://example.com/nop) — Src')
+    expect(result!.content).not.toContain('(https://aihot.virxact.com/items/nop)')
+  })
+
+  it('renders daily section items with dual links when daily provides permalink', async () => {
+    const dailyWithPermalink = {
+      ...dailyOk,
+      sections: [
+        {
+          label: '模型发布/更新',
+          items: [
+            {
+              title: 'Claude Opus 4.7',
+              summary: 's',
+              sourceUrl: 'https://anthropic.com/x',
+              sourceName: 'Anthropic Blog',
+              permalink: 'https://aihot.virxact.com/items/opus47',
+            },
+          ],
+        },
+        ...dailyOk.sections.slice(1),
+      ],
+    }
+    fetchMock.mockResolvedValueOnce(jsonResp(200, dailyWithPermalink))
+    fetchMock.mockResolvedValueOnce(jsonResp(200, itemsPage([])))
+    const result = await aihotFetcher.fetch({ type: 'aihot' })
+    expect(result!.content).toContain(
+      '- [Claude Opus 4.7](https://aihot.virxact.com/items/opus47) — Anthropic Blog（[原文](https://anthropic.com/x)）',
+    )
   })
 })

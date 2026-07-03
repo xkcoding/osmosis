@@ -106,6 +106,36 @@ export async function fetchPrFile(targetRepo: string, prNumber: number, path: st
   return Buffer.from(stdout.trim(), 'base64').toString('utf8')
 }
 
+export async function fetchRecentSyncedContents(
+  targetRepo: string,
+  sourceName: string,
+  n: number,
+): Promise<string[]> {
+  const { stdout } = await execFileAsync('gh', [
+    'pr', 'list',
+    '--repo', targetRepo,
+    '--label', `auto-sync,source:${sourceName}`,
+    '--state', 'all',
+    '--json', 'number,state,createdAt,files',
+    '--limit', '20',
+  ])
+
+  type RawPr = { number: number; state: string; createdAt: string; files: { path: string }[] }
+  const raw = JSON.parse(stdout) as RawPr[]
+  const recent = raw
+    .filter((p) => p.state === 'OPEN' || p.state === 'MERGED')
+    .filter((p) => p.files.some((f) => f.path.endsWith('.md')))
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+    .slice(0, n)
+
+  const contents: string[] = []
+  for (const pr of recent) {
+    const md = pr.files.find((f) => f.path.endsWith('.md'))!
+    contents.push(await fetchPrFile(targetRepo, pr.number, md.path))
+  }
+  return contents
+}
+
 function extractSourceName(labels: string[]): string {
   const label = labels.find((l) => l.startsWith('source:'))
   return label ? label.slice('source:'.length) : 'unknown'
