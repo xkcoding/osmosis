@@ -115,7 +115,12 @@ async function fetchDaily(date: string): Promise<DailyResponse | null> {
   return body as DailyResponse
 }
 
-async function fetchSelectedWindow(sinceIso: string): Promise<SelectedItem[]> {
+interface SelectedWindow {
+  items: SelectedItem[]
+  truncated: boolean
+}
+
+async function fetchSelectedWindow(sinceIso: string): Promise<SelectedWindow> {
   const sinceMs = Date.parse(sinceIso)
   const collected: SelectedItem[] = []
   const seenIds = new Set<string>()
@@ -131,12 +136,12 @@ async function fetchSelectedWindow(sinceIso: string): Promise<SelectedItem[]> {
       const res = await fetchWithRetry(url)
       if (!res.ok) {
         console.error(`[aihot] selected endpoint ${res.status}, degrading to collected-so-far`)
-        return collected
+        return { items: collected, truncated: false }
       }
       body = (await res.json()) as SelectedResponse
     } catch (err) {
       console.error('[aihot] selected endpoint error, degrading to collected-so-far:', err)
-      return collected
+      return { items: collected, truncated: false }
     }
 
     const items = Array.isArray(body.items) ? body.items : []
@@ -146,19 +151,24 @@ async function fetchSelectedWindow(sinceIso: string): Promise<SelectedItem[]> {
       if (!item.id || seenIds.has(item.id)) continue
       seenIds.add(item.id)
       sawNewId = true
-      if (item.publishedAt == null) continue // 无法参与窗口判定，跳过且不终止
-      if (Date.parse(item.publishedAt) < sinceMs) {
+      // publishedAt 为 null 时无法参与窗口判定：保留（宁重勿漏，交给集合去重），但不触发终止
+      if (item.publishedAt != null && Date.parse(item.publishedAt) < sinceMs) {
         hitBoundary = true
         break
       }
       collected.push(item)
     }
 
-    if (hitBoundary || !sawNewId || !body.hasNext || !body.nextCursor) break
+    if (hitBoundary || !sawNewId || !body.hasNext || !body.nextCursor) {
+      return { items: collected, truncated: false }
+    }
     cursor = body.nextCursor
-    await sleep(PAGE_INTERVAL_MS)
+    if (page < MAX_PAGES - 1) await sleep(PAGE_INTERVAL_MS)
   }
-  return collected
+
+  // 触顶且服务端仍报 hasNext：截断必须可见，不能静默当作完整窗口
+  console.error(`[aihot] selected window truncated at ${MAX_PAGES} pages, more items advertised by API`)
+  return { items: collected, truncated: true }
 }
 
 function linkLine(
@@ -239,7 +249,7 @@ function renderDailyMarkdown(daily: DailyResponse): string {
   return lines.join('\n').trim()
 }
 
-function renderSelectedMarkdown(items: SelectedItem[]): string {
+function renderSelectedMarkdown(items: SelectedItem[], truncated: boolean): string {
   const lines: string[] = []
   for (const item of items) {
     if (!item.title || !item.url) continue
@@ -249,6 +259,10 @@ function renderSelectedMarkdown(items: SelectedItem[]): string {
     }
   }
   if (lines.length === 0) return ''
+  if (truncated) {
+    lines.push('')
+    lines.push('> ⚠️ 精选池已达单次抓取上限，本次仅收录最新条目；次日窗口会自动补收其余部分。')
+  }
   return ['## 🔥 新入选精选', ...lines].join('\n').trim()
 }
 
@@ -270,7 +284,8 @@ export const aihotFetcher: Fetcher = {
     const daily = await fetchDaily(parts.date)
     if (!daily) return null
 
-    let selected = await fetchSelectedWindow(computeSinceIso(ctx?.lastSyncedAt))
+    const window = await fetchSelectedWindow(computeSinceIso(ctx?.lastSyncedAt))
+    let selected = window.items
     if (selected.length > 0) {
       let pushedKeys = new Set<string>()
       if (ctx?.getRecentSyncedContents) {
@@ -287,7 +302,7 @@ export const aihotFetcher: Fetcher = {
     }
 
     const dailyMd = renderDailyMarkdown(daily)
-    const selectedMd = renderSelectedMarkdown(selected)
+    const selectedMd = renderSelectedMarkdown(selected, window.truncated)
     const content = [dailyMd, selectedMd].filter((s) => s.length > 0).join('\n\n---\n\n')
     const notifyBody = truncateNotifyBody(content)
 

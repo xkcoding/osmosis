@@ -70,8 +70,9 @@ export interface FetchContext {
 **翻页拿全**（`mode=selected`）：
 
 - `take=100`，用响应 `nextCursor` 翻页。
-- 终止：页内出现**非 null** `publishedAt < since` 的条目即停（该条目及更旧的全部丢弃）；`publishedAt` 为 null 的条目跳过、不参与终止判定。
+- 终止：页内出现**非 null** `publishedAt < since` 的条目即停（该条目及更旧的全部丢弃）；`publishedAt` 为 null 的条目**保留**（宁重勿漏——跨天重复由集合去重兜底），仅不参与终止判定。（对抗式审查修订：原"跳过"设计构成永久遗漏路径，与需求红线冲突。）
 - 防护（cursor 失效会静默回首屏而不报错）：按条目 `id` 去重；整页无新 id 即停；最多 5 页硬上限。
+- 触顶且服务端仍报 `hasNext` 时，截断必须**可见**：记 error 日志，并在精选区块末尾渲染截断提示（次日 48h 重叠窗口会自动补收大部分被截条目）。不选择整体失败——那会连完整日报一起丢掉，损失更大。（对抗式审查修订：原实现静默截断。）
 - 页间 200ms 间隔（spec 建议）。
 
 **429 处理**：`getJson` 遇 429 退避 1.5 秒重试一次，仍失败按现有降级路径处理（daily 抛错、selected 降级为空）。
@@ -100,7 +101,8 @@ export interface FetchContext {
 | 429（daily 或 selected） | 退避 1.5s 重试一次，再失败走上一行 |
 | cursor 静默回首屏 | id 去重 + 整页无新 id 即停 + 5 页硬上限 |
 | `lastSyncedAt` 超过 7 天 | since clamp 到 now − 7d（同服务端硬上限行为一致） |
-| `publishedAt` 为 null | 条目跳过，不参与翻页终止判定 |
+| `publishedAt` 为 null | 条目保留（集合去重兜底），不参与翻页终止判定 |
+| 翻页触顶仍有 `hasNext` | error 日志 + 卡片内可见截断提示，不静默 |
 | 回读历史 PR 失败 | 去重集合降级为空，宁重勿漏，记 warn |
 
 ## 测试计划（`src/fetchers/aihot.test.ts` 扩展）

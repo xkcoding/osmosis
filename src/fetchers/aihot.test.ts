@@ -301,7 +301,7 @@ describe('aihot selected window & pagination', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2) // daily + 1 page，未跟进 cursor
   })
 
-  it('skips null-publishedAt items without terminating pagination', async () => {
+  it('keeps null-publishedAt items without terminating pagination', async () => {
     fetchMock.mockResolvedValueOnce(jsonResp(200, dailyOk))
     fetchMock.mockResolvedValueOnce(
       jsonResp(200, itemsPage(
@@ -309,8 +309,38 @@ describe('aihot selected window & pagination', () => {
       )),
     )
     const result = await aihotFetcher.fetch({ type: 'aihot' })
-    expect(result!.content).not.toContain('Item nullpub')
+    expect(result!.content).toContain('Item nullpub')
     expect(result!.content).toContain('Item good')
+  })
+
+  it('dedups null-publishedAt items against pushed set like any other item', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResp(200, dailyOk))
+    fetchMock.mockResolvedValueOnce(jsonResp(200, itemsPage([selItem('nullpub', null)])))
+    const ctx = {
+      getRecentSyncedContents: async () => ['- [t](https://aihot.virxact.com/items/nullpub)'],
+    }
+    const result = await aihotFetcher.fetch({ type: 'aihot' }, ctx)
+    expect(result!.content).not.toContain('Item nullpub')
+  })
+
+  it('renders a visible truncation notice when page cap is hit with more pages advertised', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResp(200, dailyOk))
+    for (let i = 0; i < 5; i++) {
+      fetchMock.mockResolvedValueOnce(
+        jsonResp(200, itemsPage([selItem(`pg${i}`, '2026-05-08T02:00:00.000Z')], { hasNext: true, nextCursor: `c${i}` })),
+      )
+    }
+    const promise = aihotFetcher.fetch({ type: 'aihot' })
+    const [result] = await Promise.all([promise, vi.runAllTimersAsync()])
+    expect(fetchMock).toHaveBeenCalledTimes(6)
+    expect(result!.content).toContain('已达单次抓取上限')
+  })
+
+  it('renders no truncation notice when pagination ends naturally', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResp(200, dailyOk))
+    fetchMock.mockResolvedValueOnce(jsonResp(200, itemsPage([selItem('only', '2026-05-08T02:00:00.000Z')])))
+    const result = await aihotFetcher.fetch({ type: 'aihot' })
+    expect(result!.content).not.toContain('已达单次抓取上限')
   })
 
   it('stops when a page yields no new ids (cursor silently reset)', async () => {
