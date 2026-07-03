@@ -1,9 +1,14 @@
-import type { Fetcher, FetchResult, SourceConfig } from './types.js'
+import type { Fetcher, FetchResult, SourceConfig, FetchContext } from './types.js'
 import { todayParts } from '../template.js'
 
 const BASE_URL = 'https://aihot.virxact.com'
 const USER_AGENT = 'osmosis/1.0 (+https://github.com/xkcoding/osmosis)'
-const SELECTED_TAKE = 20
+const SELECTED_TAKE = 100
+const MAX_PAGES = 5
+const PAGE_INTERVAL_MS = 200
+const RETRY_429_MS = 1500
+const OVERLAP_MS = 48 * 60 * 60 * 1000
+const SINCE_CAP_MS = 7 * 24 * 60 * 60 * 1000
 const NOTIFY_BODY_MAX_BYTES = 20480
 const TRUNCATION_SUFFIX = '…\n（已截断）'
 
@@ -50,16 +55,31 @@ interface SelectedItem {
   id?: string
   title?: string | null
   url?: string | null
+  permalink?: string | null
   source?: string | null
   summary?: string | null
+  publishedAt?: string | null
 }
 
 interface SelectedResponse {
   items: SelectedItem[]
+  hasNext?: boolean
+  nextCursor?: string | null
+}
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+
+async function fetchWithRetry(url: string): Promise<Response> {
+  let res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } })
+  if (res.status === 429) {
+    await sleep(RETRY_429_MS)
+    res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } })
+  }
+  return res
 }
 
 async function getJson<T>(url: string): Promise<{ status: number; body: T | null }> {
-  const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } })
+  const res = await fetchWithRetry(url)
   if (res.status === 404) {
     try {
       return { status: 404, body: (await res.json()) as T }
@@ -74,9 +94,14 @@ async function getJson<T>(url: string): Promise<{ status: number; body: T | null
   return { status: res.status, body: (await res.json()) as T }
 }
 
-function todayUtcMidnightIso(): string {
-  const d = todayParts()
-  return `${d.date}T00:00:00.000Z`
+function computeSinceIso(lastSyncedAt: string | undefined): string {
+  const now = Date.now()
+  const overlapFloor = now - OVERLAP_MS
+  const cap = now - SINCE_CAP_MS
+  const parsed = lastSyncedAt ? Date.parse(lastSyncedAt) : NaN
+  let t = Number.isFinite(parsed) ? Math.min(parsed, overlapFloor) : overlapFloor
+  t = Math.max(t, cap)
+  return new Date(t).toISOString()
 }
 
 async function fetchDaily(date: string): Promise<DailyResponse | null> {
@@ -87,20 +112,50 @@ async function fetchDaily(date: string): Promise<DailyResponse | null> {
   return body as DailyResponse
 }
 
-async function fetchSelected(sinceIso: string): Promise<SelectedItem[]> {
-  const url = `${BASE_URL}/api/public/items?mode=selected&since=${encodeURIComponent(sinceIso)}&take=${SELECTED_TAKE}`
-  try {
-    const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } })
-    if (!res.ok) {
-      console.error(`[aihot] selected endpoint ${res.status}, degrading to daily-only`)
-      return []
+async function fetchSelectedWindow(sinceIso: string): Promise<SelectedItem[]> {
+  const sinceMs = Date.parse(sinceIso)
+  const collected: SelectedItem[] = []
+  const seenIds = new Set<string>()
+  let cursor: string | null = null
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const url =
+      `${BASE_URL}/api/public/items?mode=selected&since=${encodeURIComponent(sinceIso)}&take=${SELECTED_TAKE}` +
+      (cursor ? `&cursor=${encodeURIComponent(cursor)}` : '')
+
+    let body: SelectedResponse
+    try {
+      const res = await fetchWithRetry(url)
+      if (!res.ok) {
+        console.error(`[aihot] selected endpoint ${res.status}, degrading to collected-so-far`)
+        return collected
+      }
+      body = (await res.json()) as SelectedResponse
+    } catch (err) {
+      console.error('[aihot] selected endpoint error, degrading to collected-so-far:', err)
+      return collected
     }
-    const body = (await res.json()) as SelectedResponse
-    return Array.isArray(body.items) ? body.items : []
-  } catch (err) {
-    console.error('[aihot] selected endpoint error, degrading to daily-only:', err)
-    return []
+
+    const items = Array.isArray(body.items) ? body.items : []
+    let sawNewId = false
+    let hitBoundary = false
+    for (const item of items) {
+      if (!item.id || seenIds.has(item.id)) continue
+      seenIds.add(item.id)
+      sawNewId = true
+      if (item.publishedAt == null) continue // 无法参与窗口判定，跳过且不终止
+      if (Date.parse(item.publishedAt) < sinceMs) {
+        hitBoundary = true
+        break
+      }
+      collected.push(item)
+    }
+
+    if (hitBoundary || !sawNewId || !body.hasNext || !body.nextCursor) break
+    cursor = body.nextCursor
+    await sleep(PAGE_INTERVAL_MS)
   }
+  return collected
 }
 
 function renderDailyMarkdown(daily: DailyResponse): string {
@@ -169,12 +224,12 @@ function truncateNotifyBody(s: string): string {
 export const aihotFetcher: Fetcher = {
   type: 'aihot',
 
-  async fetch(_config: SourceConfig): Promise<FetchResult | null> {
+  async fetch(_config: SourceConfig, ctx?: FetchContext): Promise<FetchResult | null> {
     const parts = todayParts()
     const daily = await fetchDaily(parts.date)
     if (!daily) return null
 
-    const selected = await fetchSelected(todayUtcMidnightIso())
+    const selected = await fetchSelectedWindow(computeSinceIso(ctx?.lastSyncedAt))
 
     const dailyMd = renderDailyMarkdown(daily)
     const selectedMd = renderSelectedMarkdown(selected)
