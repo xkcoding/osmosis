@@ -5,7 +5,7 @@ import { listSubscriptions, loadSubscription, type Subscription } from './config
 import { getFetcher } from './fetchers/registry.js'
 import { formatForObsidian } from './formatter.js'
 import { resolveTemplate, todayParts } from './template.js'
-import { isAlreadySynced } from './dedup.js'
+import { getSyncStatus } from './dedup.js'
 import { checkContentQuality, formatIssues } from './quality.js'
 import { ossClientFromEnv } from './oss.js'
 import { rehostMarkdownImages } from './image-rehost.js'
@@ -97,8 +97,8 @@ async function runFetch(): Promise<void> {
 
   const targetRepo = process.env.TARGET_REPO
   if (targetRepo) {
-    const synced = await isAlreadySynced({ targetRepo, sourceName: sub.name, date: parts.date })
-    if (synced) {
+    const status = await getSyncStatus({ targetRepo, sourceName: sub.name, date: parts.date })
+    if (status.syncedToday) {
       console.log(`[fetch] ${sub.name} ${parts.date}: already synced, skip`)
       writeOutput('has_new_content', 'false')
       writeOutput('source_name', sub.name)
