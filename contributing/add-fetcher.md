@@ -7,7 +7,7 @@ A fetcher pulls one source's "today's content" and returns it as `FetchResult | 
 Create `src/fetchers/<type>.ts`:
 
 ```ts
-import type { Fetcher, FetchResult, SourceConfig } from './types.js'
+import type { Fetcher, FetchResult, SourceConfig, FetchContext } from './types.js'
 import { resolveTemplate, todayParts } from '../template.js'
 
 interface MyConfig extends SourceConfig {
@@ -18,7 +18,7 @@ interface MyConfig extends SourceConfig {
 export const myFetcher: Fetcher = {
   type: 'my-type',
 
-  async fetch(config: SourceConfig): Promise<FetchResult | null> {
+  async fetch(config: SourceConfig, ctx?: FetchContext): Promise<FetchResult | null> {
     const cfg = config as MyConfig
     const parts = todayParts()
 
@@ -42,6 +42,11 @@ export const myFetcher: Fetcher = {
 - Throw on unexpected errors. Return `null` only on "no content for today".
 - Read auth from `process.env.GITHUB_TOKEN` (or your own env) — never hardcode.
 - Honor `todayParts()` — never compute "today" yourself.
+
+**`ctx` (optional `FetchContext`)** — GitHub-derived state, injected by `runFetch`:
+- `lastSyncedAt`: `createdAt` of this source's most recent synced PR. Use it to window a *streaming* upstream from the previous push instead of a fixed "today" boundary (see `src/fetchers/aihot.ts`).
+- `getRecentSyncedContents(n)`: lazily fetches the markdown of the last `n` synced PRs — dedup new items against what was already pushed.
+- It is `undefined` when `TARGET_REPO` is unset (local smoke runs): always code a fallback. Never shell out to `gh` inside a fetcher — if you need more GitHub state, extend `FetchContext` instead.
 
 ## Step 2. Register it
 

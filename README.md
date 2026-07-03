@@ -17,7 +17,7 @@ cron (每小时)
 - **TypeScript** 负责 fetch / format / summarize / notify
 - **GitHub Actions** 负责调度、并发、PR 创建
 - **PR 粒度**：每源独立 PR，便于隔离与 review
-- **去重**：依赖目标仓库的 PR label（`auto-sync` + `source:<name>`）+ 标题日期搜索
+- **去重**：依赖目标仓库的 PR label（`auto-sync` + `source:<name>`）+ 标题日期搜索；同一份状态反哺抓取（`FetchContext`：上次同步时间 + 最近 PR 内容），流式源（如 aihot 精选池）据此实现推送间无缝窗口 + 已推送条目去重
 - **LLM**：默认 `MiniMax-M2.7-highspeed`（MiniMax 平台），可通过 `SUMMARY_MODEL` 切换；`LLM_BASE_URL` 覆盖 API 入口
 
 ## 目录结构
@@ -29,14 +29,19 @@ osmosis/
 │   ├── index.ts                        # CLI 入口（fetch / summarize / notify / matrix / list）
 │   ├── config.ts                       # 解析 subscriptions/*.yml
 │   ├── formatter.ts                    # Obsidian frontmatter 格式化
-│   ├── summarizer.ts                   # Vercel AI SDK + GitHub Models
-│   ├── dedup.ts                        # gh pr list 去重
-│   ├── pr-listing.ts                   # 列出当日 sync PR + 拉取 PR 文件内容
+│   ├── quality.ts                      # fetch → write 之间的内容质量门禁
+│   ├── summarizer.ts                   # LLM 摘要（Vercel AI SDK）
+│   ├── summarize-section.ts            # 每源摘要 section（LLM / 预焙 notify_body）
+│   ├── dedup.ts                        # gh pr list：当日去重 + 上次同步时间
+│   ├── pr-listing.ts                   # 列当日 sync PR、拉 PR 文件、回读历史 PR 内容
+│   ├── image-rehost.ts / image-compress.ts / oss.ts   # 图片转存 OSS/CDN
 │   ├── template.ts                     # {date}/{year}/{month}/{day} 模板替换
 │   ├── fetchers/
-│   │   ├── types.ts
+│   │   ├── types.ts                    # Fetcher / FetchResult / FetchContext
 │   │   ├── registry.ts
-│   │   └── github-file.ts
+│   │   ├── github-file.ts
+│   │   ├── rss.ts
+│   │   └── aihot.ts
 │   └── notifiers/
 │       ├── types.ts
 │       ├── format.ts
@@ -44,7 +49,9 @@ osmosis/
 │       ├── wecom.ts
 │       └── feishu.ts
 ├── subscriptions/
-│   └── builderpulse.yml
+│   ├── builderpulse.yml
+│   ├── juya-ai-daily.yml
+│   └── aihot.yml
 ├── prompts/
 │   └── summary.md                      # LLM system prompt（可热改）
 └── package.json
