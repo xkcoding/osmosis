@@ -30,6 +30,11 @@ export function todayParts(now: Date = new Date()): DateParts {
   return { date: `${year}-${month}-${day}`, year, month, day }
 }
 
+/** True when OSMOSIS_DATE pins "today", i.e. this run is a backfill rather than the live cron. */
+export function isDatePinned(): boolean {
+  return Boolean(process.env.OSMOSIS_DATE?.trim())
+}
+
 export function resolveTemplate(template: string, parts: DateParts): string {
   return template
     .replaceAll('{date}', parts.date)
