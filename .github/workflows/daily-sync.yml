@@ -2,13 +2,13 @@ name: Daily Sync
 
 on:
   schedule:
-    - cron: '0 * * * *'
+    # Off the top of the hour: GitHub delays and can drop schedule events queued at :00 under load.
+    - cron: '17 * * * *'
   workflow_dispatch:
 
 env:
   TARGET_REPO: xkcoding/second-brain
   NODE_VERSION: '22'
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
   prepare:
@@ -18,11 +18,11 @@ jobs:
       matrix: ${{ steps.scan.outputs.matrix }}
       count: ${{ steps.scan.outputs.count }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -46,22 +46,22 @@ jobs:
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     steps:
       - name: Checkout osmosis
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: osmosis
 
       - name: Checkout second-brain
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: ${{ env.TARGET_REPO }}
           token: ${{ secrets.TARGET_REPO_PAT }}
           path: second-brain
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           package_json_file: osmosis/package.json
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -100,7 +100,7 @@ jobs:
 
       - name: Create PR
         if: steps.fetch.outputs.has_new_content == 'true'
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           path: second-brain
           token: ${{ secrets.TARGET_REPO_PAT }}
@@ -124,11 +124,11 @@ jobs:
     if: always() && needs.prepare.result == 'success'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -160,7 +160,7 @@ jobs:
 
       - name: Upload summary artifact
         if: steps.summarize.outputs.has_summary == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: summary-${{ steps.date.outputs.date }}
           path: summary.md
