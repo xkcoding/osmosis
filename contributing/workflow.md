@@ -15,7 +15,7 @@ If any step fails, the PR cannot merge (assuming branch protection requires CI).
 
 ## `.github/workflows/daily-sync.yml` — operational pipeline
 
-Three jobs, hourly cron + manual `workflow_dispatch`:
+Three jobs, hourly cron at minute 17 (`17 * * * *`) + manual `workflow_dispatch`. The odd minute is deliberate: GitHub delays — and under load drops — schedule events queued at the top of the hour, so don't move it back to `:00`.
 
 ```
 prepare ──► sync (matrix per subscription, fail-fast: false) ──► notify
@@ -35,7 +35,7 @@ For each subscription:
 3. `pnpm tsx src/index.ts fetch --subscription <name> --output-dir ../second-brain`
    - Internally: dedup → fetch → quality gate → format → write file
    - Sets step outputs: `has_new_content`, `source_name`, `date`, `output_path`, `source_url`
-4. If `has_new_content == 'true'`: `peter-evans/create-pull-request@v7` against second-brain
+4. If `has_new_content == 'true'`: `peter-evans/create-pull-request@v8` against second-brain
 5. `fail-fast: false` so one bad source does not block the others
 
 ### `notify`

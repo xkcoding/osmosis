@@ -4,7 +4,7 @@ This is the handshake between osmosis (the producer) and the downstream repo tha
 
 ## Who Opens the PR
 
-- **Producer**: `osmosis/.github/workflows/daily-sync.yml`, job `sync`, step `Create PR` (uses `peter-evans/create-pull-request@v7`).
+- **Producer**: `osmosis/.github/workflows/daily-sync.yml`, job `sync`, step `Create PR` (uses `peter-evans/create-pull-request@v8`).
 - **Author identity**: the PAT stored in the downstream repo's `TARGET_REPO_PAT` secret (commits appear under that account).
 - **Target branch**: `main` (merge direction: `auto-sync/<slug>-<date>` → `main`).
 - **Cadence**: hourly cron; PRs are created only when the upstream source actually has new content and all quality gates pass.

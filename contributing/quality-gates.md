@@ -82,7 +82,7 @@ Limitation: dedup is by date + label, not by content hash. A source that changes
 Inside `.github/workflows/daily-sync.yml`:
 
 - The `Create PR` step is guarded by `if: steps.fetch.outputs.has_new_content == 'true'`. If the fetch step decided "nothing to ship" (any reason — null, dedup, quality skip), the PR step doesn't run at all.
-- `peter-evans/create-pull-request@v7` itself is a no-op when the working tree has no changes — a final belt-and-suspenders.
+- `peter-evans/create-pull-request@v8` itself is a no-op when the working tree has no changes — a final belt-and-suspenders.
 
 ## When a Gate Fails
 

@@ -133,7 +133,7 @@ WECOM_WEBHOOK_URL=... FEISHU_WEBHOOK_URL=... \
        summary: true
        channels: [wecom, feishu]
    ```
-2. 推到 main，下一个整点 cron 自动生效。
+2. 推到 main，下一次 cron（每小时第 17 分）自动生效。
 
 ### 新增 Fetcher 类型
 
