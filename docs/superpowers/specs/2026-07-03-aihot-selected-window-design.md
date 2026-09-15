@@ -40,6 +40,7 @@ AI HOT 源的推送存在系统性遗漏。整条流水线是"每源每天一张
 - 同一次 `gh pr list`（labels `auto-sync,source:<name>`、`--state all`）的 `--json` 增加 `createdAt`。
 - `syncedToday`：现有逻辑不变（OPEN/MERGED 且标题含当天日期）。
 - `lastSyncedAt`：OPEN/MERGED PR 中最大的 `createdAt`（不限日期），无则 `null`。
+  - **2026-09-15 修订**：改为取标题内容日期最新的那个 PR 的 `createdAt`（同日再比 `createdAt`，见 `src/pr-listing.ts` 的 `newestSyncedFirst`）。`OSMOSIS_DATE` 回填的 PR 创建最晚、日期却最旧，按 `createdAt` 取最大会让它挪走窗口锚点，并把真正最新的一天挤出最近 3 个 PR 的已推送集合。
 
 ### 2. Fetcher 上下文（`src/fetchers/types.ts`、`src/index.ts`）
 

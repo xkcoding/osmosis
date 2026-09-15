@@ -481,3 +481,31 @@ describe('aihot dedup & dual links', () => {
     )
   })
 })
+
+describe('aihot backfill (OSMOSIS_DATE pinned)', () => {
+  const ORIGINAL_DATE = process.env.OSMOSIS_DATE
+
+  afterEach(() => {
+    if (ORIGINAL_DATE === undefined) delete process.env.OSMOSIS_DATE
+    else process.env.OSMOSIS_DATE = ORIGINAL_DATE
+  })
+
+  it('renders only the pinned day daily and never reads the now-relative selected window', async () => {
+    process.env.OSMOSIS_DATE = '2026-05-05'
+    fetchMock.mockResolvedValueOnce(jsonResp(200, { ...dailyOk, date: '2026-05-05' }))
+    // 若仍去拉精选，会把"现在"附近的条目混进历史笔记
+    fetchMock.mockResolvedValueOnce(jsonResp(200, itemsPage([selItem('late', '2026-05-08T02:00:00.000Z')])))
+    const getRecentSyncedContents = vi.fn(async (): Promise<string[]> => [])
+    const result = await aihotFetcher.fetch(
+      { type: 'aihot' },
+      { lastSyncedAt: '2026-05-07T00:00:00.000Z', getRecentSyncedContents },
+    )
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0]![0] as string).toContain('/api/public/daily/2026-05-05')
+    expect(result!.date).toBe('2026-05-05')
+    expect(result!.content).toContain('Claude Opus 4.7')
+    expect(result!.content).not.toContain('Item late')
+    expect(result!.content).not.toContain('新入选精选')
+    expect(getRecentSyncedContents).not.toHaveBeenCalled()
+  })
+})

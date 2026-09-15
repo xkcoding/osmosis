@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { resolveTemplate, todayParts } from './template.js'
+import { isDatePinned, resolveTemplate, todayParts } from './template.js'
 
 describe('resolveTemplate', () => {
   const parts = { date: '2026-04-17', year: '2026', month: '04', day: '17' }
@@ -55,5 +55,25 @@ describe('todayParts', () => {
       process.env.OSMOSIS_DATE = '06/19/2026'
       expect(() => todayParts()).toThrow(/OSMOSIS_DATE must be YYYY-MM-DD/)
     })
+  })
+})
+
+describe('isDatePinned', () => {
+  const ORIGINAL = process.env.OSMOSIS_DATE
+  afterEach(() => {
+    if (ORIGINAL === undefined) delete process.env.OSMOSIS_DATE
+    else process.env.OSMOSIS_DATE = ORIGINAL
+  })
+
+  it('is true when OSMOSIS_DATE pins a date', () => {
+    process.env.OSMOSIS_DATE = '2026-06-19'
+    expect(isDatePinned()).toBe(true)
+  })
+
+  it('is false when OSMOSIS_DATE is unset or blank', () => {
+    delete process.env.OSMOSIS_DATE
+    expect(isDatePinned()).toBe(false)
+    process.env.OSMOSIS_DATE = '  '
+    expect(isDatePinned()).toBe(false)
   })
 })

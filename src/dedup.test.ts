@@ -36,7 +36,7 @@ describe('getSyncStatus', () => {
     expect(s.lastSyncedAt).toBeNull()
   })
 
-  it('returns max createdAt across dates as lastSyncedAt even when today is unsynced', async () => {
+  it('returns the newest-dated PR createdAt as lastSyncedAt even when today is unsynced', async () => {
     ghList([
       { title: 'sync(aihot): 2026-07-01', state: 'MERGED', createdAt: '2026-07-01T00:12:00Z' },
       { title: 'sync(aihot): 2026-07-02', state: 'MERGED', createdAt: '2026-07-02T00:11:00Z' },
@@ -44,6 +44,16 @@ describe('getSyncStatus', () => {
     const s = await getSyncStatus({ targetRepo: 'o/r', sourceName: 'aihot', date: '2026-07-03' })
     expect(s.syncedToday).toBe(false)
     expect(s.lastSyncedAt).toBe('2026-07-02T00:11:00Z')
+  })
+
+  it('anchors lastSyncedAt on the newest content date, not on a later-created backfill PR', async () => {
+    ghList([
+      { title: '📡 aihot 2026-07-03', state: 'MERGED', createdAt: '2026-07-03T00:10:00Z' },
+      // backfilled afterwards: newest createdAt, older content date
+      { title: '📡 aihot 2026-06-28', state: 'OPEN', createdAt: '2026-07-03T06:00:00Z' },
+    ])
+    const s = await getSyncStatus({ targetRepo: 'o/r', sourceName: 'aihot', date: '2026-07-04' })
+    expect(s.lastSyncedAt).toBe('2026-07-03T00:10:00Z')
   })
 
   it('returns nulls on empty list', async () => {

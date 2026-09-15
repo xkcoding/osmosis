@@ -1,5 +1,5 @@
 import type { Fetcher, FetchResult, SourceConfig, FetchContext } from './types.js'
-import { todayParts } from '../template.js'
+import { isDatePinned, todayParts } from '../template.js'
 
 const BASE_URL = 'https://aihot.virxact.com'
 const USER_AGENT = 'osmosis/1.0 (+https://github.com/xkcoding/osmosis)'
@@ -284,7 +284,11 @@ export const aihotFetcher: Fetcher = {
     const daily = await fetchDaily(parts.date)
     if (!daily) return null
 
-    const window = await fetchSelectedWindow(computeSinceIso(ctx?.lastSyncedAt))
+    // 回填（OSMOSIS_DATE）只落当日日报：精选窗口以"现在"为锚、入选时间不可观测，无法按历史日期重建；
+    // 缺口期的精选由恢复后首个实时 run 的粗窗口（lastSyncedAt）统一补收，这里再拉只会把近期条目混进历史笔记
+    const window: SelectedWindow = isDatePinned()
+      ? { items: [], truncated: false }
+      : await fetchSelectedWindow(computeSinceIso(ctx?.lastSyncedAt))
     let selected = window.items
     if (selected.length > 0) {
       let pushedKeys = new Set<string>()
