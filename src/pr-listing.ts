@@ -106,6 +106,29 @@ export async function fetchPrFile(targetRepo: string, prNumber: number, path: st
   return Buffer.from(stdout.trim(), 'base64').toString('utf8')
 }
 
+const CONTENT_DATE_RE = /\d{4}-\d{2}-\d{2}/
+
+/**
+ * Newest-first order for a source's synced PRs: by the content date in the title
+ * (`📡 <slug> YYYY-MM-DD`), then by createdAt. A backfilled PR (OSMOSIS_DATE) is
+ * created last but carries an older date — ordering by createdAt alone would let
+ * it displace the real latest day from the pushed-set and the lastSyncedAt anchor.
+ */
+export function newestSyncedFirst(
+  a: { title: string; createdAt: string },
+  b: { title: string; createdAt: string },
+): number {
+  const da = contentDate(a)
+  const db = contentDate(b)
+  if (da !== db) return da < db ? 1 : -1
+  if (a.createdAt === b.createdAt) return 0
+  return a.createdAt < b.createdAt ? 1 : -1
+}
+
+function contentDate(p: { title: string; createdAt: string }): string {
+  return CONTENT_DATE_RE.exec(p.title)?.[0] ?? p.createdAt.slice(0, 10)
+}
+
 export async function fetchRecentSyncedContents(
   targetRepo: string,
   sourceName: string,
@@ -116,16 +139,16 @@ export async function fetchRecentSyncedContents(
     '--repo', targetRepo,
     '--label', `auto-sync,source:${sourceName}`,
     '--state', 'all',
-    '--json', 'number,state,createdAt,files',
+    '--json', 'number,title,state,createdAt,files',
     '--limit', '20',
   ])
 
-  type RawPr = { number: number; state: string; createdAt: string; files: { path: string }[] }
+  type RawPr = { number: number; title: string; state: string; createdAt: string; files: { path: string }[] }
   const raw = JSON.parse(stdout) as RawPr[]
   const recent = raw
     .filter((p) => p.state === 'OPEN' || p.state === 'MERGED')
     .filter((p) => p.files.some((f) => f.path.endsWith('.md')))
-    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+    .sort(newestSyncedFirst)
     .slice(0, n)
 
   const contents: string[] = []
