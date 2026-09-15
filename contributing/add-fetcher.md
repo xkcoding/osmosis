@@ -42,10 +42,11 @@ export const myFetcher: Fetcher = {
 - Throw on unexpected errors. Return `null` only on "no content for today".
 - Read auth from `process.env.GITHUB_TOKEN` (or your own env) — never hardcode.
 - Honor `todayParts()` — never compute "today" yourself.
+- Under `OSMOSIS_DATE` (a backfill — `isDatePinned()` is true), don't pull a *now*-relative window into the past-dated note; render only what belongs to that day (see `src/fetchers/aihot.ts`).
 
 **`ctx` (optional `FetchContext`)** — GitHub-derived state, injected by `runFetch`:
-- `lastSyncedAt`: `createdAt` of this source's most recent synced PR. Use it to window a *streaming* upstream from the previous push instead of a fixed "today" boundary (see `src/fetchers/aihot.ts`).
-- `getRecentSyncedContents(n)`: lazily fetches the markdown of the last `n` synced PRs — dedup new items against what was already pushed.
+- `lastSyncedAt`: `createdAt` of this source's latest synced PR — "latest" by the content date in the PR title, not by `createdAt`, so a backfilled PR never moves the anchor. Use it to window a *streaming* upstream from the previous push instead of a fixed "today" boundary (see `src/fetchers/aihot.ts`).
+- `getRecentSyncedContents(n)`: lazily fetches the markdown of the latest `n` synced PRs (same content-date order) — dedup new items against what was already pushed.
 - It is `undefined` when `TARGET_REPO` is unset (local smoke runs): always code a fallback. Never shell out to `gh` inside a fetcher — if you need more GitHub state, extend `FetchContext` instead.
 
 ## Step 2. Register it
