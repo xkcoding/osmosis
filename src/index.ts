@@ -11,7 +11,7 @@ import { ossClientFromEnv } from './oss.js'
 import { rehostMarkdownImages } from './image-rehost.js'
 import { summarize } from './summarizer.js'
 import { buildSection } from './summarize-section.js'
-import { fetchPrFile, fetchRecentSyncedContents, listSyncedPrs, markSummarySent } from './pr-listing.js'
+import { fetchLastSyncState, fetchPrFile, fetchRecentSyncedContents, listSyncedPrs, markSummarySent } from './pr-listing.js'
 import { getNotifier, listChannels } from './notifiers/registry.js'
 import type { NotifyPayload } from './notifiers/types.js'
 import type { FetchContext } from './fetchers/types.js'
@@ -108,7 +108,7 @@ async function runFetch(): Promise<void> {
       return
     }
     ctx = {
-      lastSyncedAt: status.lastSyncedAt ?? undefined,
+      getLastSyncState: () => fetchLastSyncState(targetRepo, sub.name),
       getRecentSyncedContents: (n) => fetchRecentSyncedContents(targetRepo, sub.name, n),
     }
   }

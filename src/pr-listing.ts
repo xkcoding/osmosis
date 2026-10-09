@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { parse as parseYaml } from 'yaml'
 
 const execFileAsync = promisify(execFile)
 
@@ -112,7 +113,7 @@ const CONTENT_DATE_RE = /\d{4}-\d{2}-\d{2}/
  * Newest-first order for a source's synced PRs: by the content date in the title
  * (`📡 <slug> YYYY-MM-DD`), then by createdAt. A backfilled PR (OSMOSIS_DATE) is
  * created last but carries an older date — ordering by createdAt alone would let
- * it displace the real latest day from the pushed-set and the lastSyncedAt anchor.
+ * it displace the real latest day from the pushed-set and the sync_state anchor.
  */
 export function newestSyncedFirst(
   a: { title: string; createdAt: string },
@@ -157,6 +158,34 @@ export async function fetchRecentSyncedContents(
     contents.push(await fetchPrFile(targetRepo, pr.number, md.path))
   }
   return contents
+}
+
+/**
+ * Reads the `sync_state` frontmatter map from the source's newest synced PR
+ * (title-date order). Missing PR / field / unparsable frontmatter → undefined;
+ * gh errors propagate so the fetcher picks its own degradation.
+ */
+export async function fetchLastSyncState(
+  targetRepo: string,
+  sourceName: string,
+): Promise<Record<string, string> | undefined> {
+  const [latest] = await fetchRecentSyncedContents(targetRepo, sourceName, 1)
+  if (!latest) return undefined
+  const m = latest.match(/^---\n([\s\S]*?)\n---\n/)
+  if (!m || !m[1]) return undefined
+  let fm: unknown
+  try {
+    fm = parseYaml(m[1])
+  } catch {
+    return undefined
+  }
+  const raw = (fm as Record<string, unknown> | null)?.sync_state
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const state: Record<string, string> = {}
+  for (const [k, v] of Object.entries(raw)) {
+    if (typeof v === 'string') state[k] = v
+  }
+  return Object.keys(state).length > 0 ? state : undefined
 }
 
 function extractSourceName(labels: string[]): string {
