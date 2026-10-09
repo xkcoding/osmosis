@@ -1,6 +1,5 @@
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { newestSyncedFirst } from './pr-listing.js'
 
 const execFileAsync = promisify(execFile)
 
@@ -12,7 +11,6 @@ export interface DedupQuery {
 
 export interface SyncStatus {
   syncedToday: boolean
-  lastSyncedAt: string | null
 }
 
 export async function getSyncStatus(query: DedupQuery): Promise<SyncStatus> {
@@ -21,12 +19,12 @@ export async function getSyncStatus(query: DedupQuery): Promise<SyncStatus> {
     '--repo', query.targetRepo,
     '--label', `auto-sync,source:${query.sourceName}`,
     '--state', 'all',
-    '--json', 'title,state,createdAt',
+    '--json', 'title,state',
     '--limit', '50',
   ])
-  const list = JSON.parse(stdout) as { title: string; state: string; createdAt: string }[]
-  const active = list.filter((p) => p.state === 'OPEN' || p.state === 'MERGED')
-  const syncedToday = active.some((p) => p.title.includes(query.date))
-  const lastSyncedAt = active.sort(newestSyncedFirst)[0]?.createdAt ?? null
-  return { syncedToday, lastSyncedAt }
+  const list = JSON.parse(stdout) as { title: string; state: string }[]
+  const syncedToday = list.some(
+    (p) => (p.state === 'OPEN' || p.state === 'MERGED') && p.title.includes(query.date),
+  )
+  return { syncedToday }
 }

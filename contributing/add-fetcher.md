@@ -45,7 +45,7 @@ export const myFetcher: Fetcher = {
 - Under `OSMOSIS_DATE` (a backfill — `isDatePinned()` is true), don't pull a *now*-relative window into the past-dated note; render only what belongs to that day (see `src/fetchers/aihot.ts`).
 
 **`ctx` (optional `FetchContext`)** — GitHub-derived state, injected by `runFetch`:
-- `lastSyncedAt`: `createdAt` of this source's latest synced PR — "latest" by the content date in the PR title, not by `createdAt`, so a backfilled PR never moves the anchor. Use it to window a *streaming* upstream from the previous push instead of a fixed "today" boundary (see `src/fetchers/aihot.ts`).
+- `getLastSyncState()`: lazily reads the `sync_state` frontmatter map from this source's latest synced PR — "latest" by the content date in the PR title, not by `createdAt`, so a backfilled PR never moves it. Pair it with `FetchResult.syncState` (see below) to carry a resume point (e.g. an upstream changes-feed cursor) from one run to the next. Returns `undefined` when there is no PR or no `sync_state`; may throw on GitHub errors — degrade, don't fail the run.
 - `getRecentSyncedContents(n)`: lazily fetches the markdown of the latest `n` synced PRs (same content-date order) — dedup new items against what was already pushed.
 - It is `undefined` when `TARGET_REPO` is unset (local smoke runs): always code a fallback. Never shell out to `gh` inside a fetcher — if you need more GitHub state, extend `FetchContext` instead.
 
@@ -168,7 +168,7 @@ return {
   title: 'AI HOT 日报',
   date: parts.date,
   content: fullMarkdown,            // saved to the vault, may include extras
-  sourceUrl: 'https://aihot.virxact.com/',
+  sourceUrl: 'https://aihot.news/',
   notifyBody: leadAndSectionsOnly,  // the slice you want in IM cards
 }
 ```
@@ -180,6 +180,17 @@ Behavior matrix:
 | `true` (default) | any | LLM runs; `notify_body` ignored |
 | `false` | present | IM card uses `notify_body` verbatim; LLM not called |
 | `false` | absent | Source silently skipped (back-compat) |
+
+## Optional: cross-run state (`syncState`)
+
+If your upstream offers a resumable changes feed (a cursor / watermark), don't reconstruct "what's new" from time windows. Return `FetchResult.syncState` — a flat `Record<string, string>` — and `formatForObsidian` writes it into the synced file's frontmatter as `sync_state:`. The next run reads it back via `ctx.getLastSyncState()`. No database: the state lives in the downstream PR, like everything else.
+
+Rules:
+- Only advance the stored cursor past data you actually rendered; on partial failure write the last fully-applied cursor (or the old one). Failure bias is "duplicate beats loss".
+- Always have a no-state path (first run, local smoke, unreadable state) — and keep a pushed-set dedup via `getRecentSyncedContents` to absorb overlaps.
+- Don't write `syncState` when `isDatePinned()` (backfill): a "now" watermark doesn't belong in a past day's note.
+
+`src/fetchers/aihot.ts` is the reference implementation (`selected/changes` cursor + snapshot/window fallback).
 
 ## Step 8. Open the PR
 

@@ -53,4 +53,21 @@ describe('formatForObsidian', () => {
     const fm = extractFrontmatter(out)
     expect('notify_body' in fm).toBe(false)
   })
+
+  it('persists syncState into frontmatter sync_state when provided', () => {
+    const out = formatForObsidian({ ...result, syncState: { cursor: 'ax1.abc' } }, { title: result.title })
+    const fm = extractFrontmatter(out)
+    expect(fm.sync_state).toEqual({ cursor: 'ax1.abc' })
+    expect(out).toMatch(/---\n\n# Hi\n\nbody\n/)
+  })
+
+  it('omits sync_state when syncState is absent', () => {
+    const fm = extractFrontmatter(formatForObsidian(result, { title: result.title }))
+    expect('sync_state' in fm).toBe(false)
+  })
+
+  it('omits sync_state when syncState is empty', () => {
+    const fm = extractFrontmatter(formatForObsidian({ ...result, syncState: {} }, { title: result.title }))
+    expect('sync_state' in fm).toBe(false)
+  })
 })
